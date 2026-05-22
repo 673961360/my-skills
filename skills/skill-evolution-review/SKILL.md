@@ -1,6 +1,6 @@
 ---
 name: skill-evolution-review
-description: Use when evaluating your complete Skills system against public patterns for improvement opportunities — runs deep research and outputs structured evolution report
+description: Use when the user wants to evaluate their complete Skills system against public community patterns for improvement opportunities
 ---
 
 # Skill Evolution Review
@@ -9,9 +9,15 @@ description: Use when evaluating your complete Skills system against public patt
 
 评估自有 Skills 体系与公开社区最新模式的差距，输出可执行的改进建议。
 
+## 触发条件
+
+用户运行 `/skill-evolution-review` 时激活。
+
 ## When to Use
 
 用户手动触发 `/skill-evolution-review` 时运行。建议每 2-4 周运行一次。
+
+> 本 Skill 是 `AGENTS.md` 中"公开 Skills 评估与吸收流程"的**自动化深度调研版本**。AGENTS.md 定义了手动评估流程，本 Skill 通过自动搜索公开资料、对比分析、生成结构化报告来执行同样的目标，但覆盖范围更广、输出更结构化。两者不冲突——本 Skill 输出建议后，具体的吸收动作仍按 AGENTS.md 流程执行（理解后重写、标注来源、验证正确性）。
 
 ## Workflow
 
@@ -115,3 +121,8 @@ description: Use when evaluating your complete Skills system against public patt
 - 优先小改动、可维护、可复用。
 - 区分公开来源事实和你的建议判断。
 - 如果公开资料不足，直接说明，不要猜。
+
+## 变更记录
+
+### 2026-05-22
+- 初始创建：从设计文档和实现计划生成
