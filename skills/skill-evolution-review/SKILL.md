@@ -5,21 +5,17 @@ description: Use when the user wants to evaluate their complete Skills system ag
 
 # Skill Evolution Review
 
-## Purpose
+## 职责
 
 评估自有 Skills 体系与公开社区最新模式的差距，输出可执行的改进建议。
 
 ## 触发条件
 
-用户运行 `/skill-evolution-review` 时激活。
-
-## When to Use
-
-用户手动触发 `/skill-evolution-review` 时运行。建议每 2-4 周运行一次。
+用户运行 `/skill-evolution-review` 时激活。建议每 2-4 周运行一次。
 
 > 本 Skill 是 `AGENTS.md` 中"公开 Skills 评估与吸收流程"的**自动化深度调研版本**。AGENTS.md 定义了手动评估流程，本 Skill 通过自动搜索公开资料、对比分析、生成结构化报告来执行同样的目标，但覆盖范围更广、输出更结构化。两者不冲突——本 Skill 输出建议后，具体的吸收动作仍按 AGENTS.md 流程执行（理解后重写、标注来源、验证正确性）。
 
-## Workflow
+## 工作流
 
 ### 1. 读取本地 Skills 体系
 
@@ -46,13 +42,14 @@ description: Use when the user wants to evaluate their complete Skills system ag
 
 #### 3a. 通用模式分析
 
-按 5 个评估维度逐一分析：
+按 4 个评估维度逐一分析：
 
 1. **定位** — 每个 Skill 是否解决了可重复使用的问题？
 2. **边界** — 是否过大、过散、过模糊？与其他 Skill 是否重复？
 3. **触发** — 什么时候该用它？是否容易误触发？
 4. **工作流** — 是否有稳定、可重复的处理步骤？
-5. **可吸收新做法** — 外部写法、结构、触发方式、工具化方式
+
+同时寻找可吸收的新做法：外部写法、结构、触发方式、工具化方式。
 
 #### 3b. 可比 Skill 逐项对比
 
@@ -113,7 +110,7 @@ description: Use when the user wants to evaluate their complete Skills system ag
 - 验收标准：
 ```
 
-## Rules
+## 规则
 
 - 不要为了完整而完整。
 - 不要输出长篇审计清单。
