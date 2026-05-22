@@ -77,7 +77,7 @@ description: Use when the user wants to evaluate their complete Skills system ag
 
 每条格式：
 - 新思路：
-- 来源：
+- 来源：（必须附带原始 URL）
 - 为什么值得参考：
 - 适合吸收到哪里：
 - 不适合照搬的地方：
@@ -118,6 +118,7 @@ description: Use when the user wants to evaluate their complete Skills system ag
 - 优先小改动、可维护、可复用。
 - 区分公开来源事实和你的建议判断。
 - 如果公开资料不足，直接说明，不要猜。
+- 搜索阶段最多发起 8 次 WebSearch（每个维度 2 次），超限后停止搜索、用已有结果分析。
 
 ## 变更记录
 
