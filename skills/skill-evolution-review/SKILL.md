@@ -36,8 +36,6 @@ description: Use when the user wants to evaluate their complete Skills system ag
 
 **筛选原则**：只保留包含具体实现细节、设计决策、踩坑经验的内容。排除泛泛 AI 新闻、营销稿、纯观点输出。
 
-**可比 Skill 搜索**：针对自有 Skills 的功能描述，额外搜索功能类似的公开 Skill（如另一个"AI 动态追踪" Skill），提取其 SKILL.md 全文用于后续逐项对比。
-
 ### 3. 对比分析
 
 #### 3a. 通用模式分析
@@ -51,14 +49,16 @@ description: Use when the user wants to evaluate their complete Skills system ag
 
 同时寻找可吸收的新做法：外部写法、结构、触发方式、工具化方式。
 
-#### 3b. 可比 Skill 逐项对比
+#### 3b. 可比 Skill 逐项对比（按需触发）
 
-对 Step 2 中发现的功能类似公开 Skill，执行逐项对比：
+当用户提供一个公开 Skill 的 URL 或名称时，将其 SKILL.md 全文与对应自有 Skill 逐项对比：
 
 - **触发条件精准度** — 对方的触发描述是否更具体？
 - **工作流完整性** — 对方的步骤是否覆盖了自有 Skill 遗漏的边界情况？
 - **输出格式** — 对方的输出是否更适合目标场景？
 - **Supporting Files** — 对方是否有值得借鉴的脚本/参考文件组织方式？
+
+如无可比对象，跳过本节。
 
 ### 4. 输出报告
 
