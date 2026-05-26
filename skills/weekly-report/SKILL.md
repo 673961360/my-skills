@@ -66,8 +66,10 @@ svn_repos:
 遍历配置中的每个 `git_repos`，对每个仓库执行：
 
 ```bash
-cd "仓库path" && git log --after="start_date" --before="end_date +1天" --author="当前git用户名" --pretty=format:"%H|%ai|%s" --name-status
+cd "仓库path" && git log --after="start_date" --before="end_date_plus_one" --author="$(git config user.name)" --pretty=format:"%H|%ai|%s" --name-status
 ```
+
+其中 `end_date_plus_one` = `end_date` + 1 天（YYYY-MM-DD 格式）。先用 `git config user.name` 获取当前 git 用户名，无需询问用户。
 
 如果仓库路径不存在，跳过并在末尾汇总中记录"未找到：路径"。
 如果返回为空（无提交），记录"该仓库本周无提交"，继续下一个。
@@ -77,7 +79,7 @@ cd "仓库path" && git log --after="start_date" --before="end_date +1天" --auth
 遍历配置中的每个 `svn_repos`，对每个仓库执行：
 
 ```bash
-svn log -r "{start_date}:{end_date +1天}" "仓库path"
+svn log -r "{start_date}:{end_date_plus_one}" "仓库path"
 ```
 
 如果路径不存在或无权限，跳过并记录"未找到/无权限：路径"。
@@ -93,6 +95,7 @@ ls ~/.claude/sessions/
 
 对每个 session JSON 文件，读取 `startedAt`（毫秒时间戳）、`cwd`（工作目录）、`sessionId`。
 按 `cwd` 判断该会话属于哪个项目分组（匹配 git_repos 中的 path）。
+从 session JSON 中提取首条用户 prompt 的前 100 字符，概括为会话主题（一句话描述做了什么）。
 
 汇总格式：
 | 日期 | 会话主题（从首条 prompt 概括） | 工作目录 | 关联项目 |
@@ -210,7 +213,7 @@ ls ~/.claude/sessions/
 
 3. 循环确认：每次修改后继续询问，直到用户说"可以了"/"确认"/"保存"/"没问题"/"就这样"
 
-4. **审核上限**：最多 3 轮。超过 3 轮后提醒用户：
+4. **审核上限**：最多 3 轮。每次调整时提示"当前为第 N/3 轮调整"。超过 3 轮后提醒用户：
    > "已进行 3 轮调整。如需进一步修改，可在保存后的文件中直接编辑。"
 
 5. 用户肯定回复时，进入 Step 6 保存环节。
@@ -226,7 +229,7 @@ ls ~/.claude/sessions/
 
 1. 确定文件名：
    - 周报：`reports/YYYY-MM-DD-weekly.md`（使用本周周一日期）
-   - 月报：`reports/YYYY-MM-monthly.md`（使用当月 1 日日期）
+   - 月报：`reports/YYYY-MM-DD-monthly.md`（使用当月 1 日日期）
 
 2. 将审核后的完整报告内容写入文件。注意：文件编码为 UTF-8（不带 BOM），换行符为 LF。
 
