@@ -1,6 +1,6 @@
 ---
 name: weekly-report
-description: Use when generating weekly or monthly work reports from git/svn/Claude Code/WeCom data sources. Trigger when the user asks to write a weekly report, monthly report, work summary, or generates a report.
+description: Use when generating weekly or monthly work reports from git/svn/Claude Code/WeCom data.
 ---
 
 # Weekly-Report
