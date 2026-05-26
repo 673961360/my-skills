@@ -1,13 +1,13 @@
 ---
 name: follow-ai-coding-builders
-description: 搜索过去7天 AI 编程领域高信号动态（最新AI动态 / AI雷达 / 最近AI新技术）
+description: 搜索过去7天 AI 编程领域与工程范式高信号动态（最新AI动态 / AI雷达 / 最近AI新技术 / AI工程实践 / AI协作范式 / AI工具链）
 ---
 
 # Follow AI Coding Builders
 
 ## 职责
 
-搜索 AI 编程领域过去 7 天的一手信息和高信号工程讨论，为"每周 AI 编程技术雷达"提供候选素材。
+搜索 AI 编程领域与工程范式过去 7 天的一手信息和高信号工程讨论，为"每周 AI 编程技术雷达"提供候选素材。覆盖产品动态、协作模式、工程方法论和工具链。
 
 ## 重点寻找
 
@@ -23,6 +23,9 @@ description: 搜索过去7天 AI 编程领域高信号动态（最新AI动态 / 
 - "最新AI动态"
 - "AI雷达"
 - "最近AI新技术"
+- "AI工程实践"
+- "AI协作范式"
+- "AI工具链"
 
 ## 关注方向
 
@@ -31,6 +34,9 @@ description: 搜索过去7天 AI 编程领域高信号动态（最新AI动态 / 
 - Anthropic / OpenAI 开发者动态
 - Agentic Workflow、MCP、Tools、Skills
 - AI 辅助真实开发实践（非演示、非 Demo）
+- **AI 协作范式**（小团队 + AI 工作模式、远程协作、code review / 测试 / 部署范式变化）
+- **工程方法论**（AI 时代的开发流程、质量保障、交付节奏）
+- **工具链新发现**（debug、监控、CI/CD 的 AI 化，周边效率工具）
 
 ## 排除标准
 
@@ -42,6 +48,8 @@ description: 搜索过去7天 AI 编程领域高信号动态（最新AI动态 / 
 - 纯学术研究且无工程落地关联
 - 纯观点输出（没有代码、产品、实测的内容）——只看建造者，不跟网红
 - 不推测、不脑补：不根据某人沉默、缺席或间接线索推测其动向，只收录已公开发布的内容
+- **纯理论讨论**——只有观点没有实际项目/团队/代码佐证的"AI 会改变一切"类文章
+- **工具软文**——"10 个提升你 10 倍效率的 AI 工具"类列表文
 
 ## 工作流程
 
@@ -69,6 +77,12 @@ description: 搜索过去7天 AI 编程领域高信号动态（最新AI动态 / 
 - Google AI Blog / Google Labs
 - Vercel Blog
 - Claude Blog
+- Netflix Engineering Blog
+- Spotify Engineering
+- Stripe Blog
+
+**社区**
+- Hacker News 深度帖（高评论、有工程团队参与讨论的）
 
 **播客**
 - Latent Space
@@ -95,15 +109,17 @@ description: 搜索过去7天 AI 编程领域高信号动态（最新AI动态 / 
 - Benchmark 与评测
 
 **搜索批次与上限**：最多执行 2 轮搜索，总计不超过 8 次 WebSearch。
-- **第 1 轮（必执行，4-6 次并行）**：覆盖核心产品 + 高信号人物。推荐关键词：
+- **第 1 轮（必执行，5-6 次并行）**：覆盖核心产品 + 高信号人物 + 范式与工具。推荐关键词：
   - `Claude Code OR Codex OR Cursor update latest`
   - `Anthropic OR OpenAI OR Google AI coding agent`
   - `GitHub Copilot agent changelog`
   - `Latent Space podcast AI coding`
   - `karpathy OR swyx OR "Amjad Masad" OR "Guillermo Rauch" AI`
+  - `AI engineering team workflow OR collaboration OR "how we build"`
 - **第 2 轮（可选，仅当高信号来源无有效素材时补搜，1-2 次）**：针对缺失来源补搜。
   - X 定向搜索示例：`site:x.com karpathy`、`site:x.com swyx`
   - 播客定向搜索示例：`Latent Space podcast episode 2026`
+  - 范式与工具补搜示例：`site:news.ycombinator.com AI engineering lessons`
 - 达到 8 次上限后停止搜索，基于已有素材整理输出。宁可输出少，不为了凑数而搜索。
 
 **时间过滤**：以当前日期为锚点，按以下窗口逐条检查搜索结果发布时间：
@@ -120,13 +136,16 @@ description: 搜索过去7天 AI 编程领域高信号动态（最新AI动态 / 
 只输出候选素材，不写周报。采用紧凑推送格式，适配手机屏幕扫读。
 
 **区块顺序与排序规则**：
-先按以下顺序分三个区块，每个区块内部按重要性从高到低排列：
+先按以下顺序分四个区块，每个区块内部按重要性从高到低排列：
 
 1. X / 社交动态 — 建造者近期发言与产品发布
-2. 官方博客 — Anthropic、OpenAI、Google、Vercel 等
+2. 官方博客 — Anthropic、OpenAI、Google、Vercel、Netflix、Spotify、Stripe 等
 3. 播客 — Latent Space、No Priors、MAD Podcast 等
+4. 范式与工具 — 协作模式、工程方法论、工具链新发现
 
 **同级别次级排序**：同一区块内重要性等级相同时，按时间倒序排列（最新的在前）。
+
+**"范式与工具"区块限流**：该区块上限 5 条。如果当周有高质量范式与工具动态，至少收录 1-3 条；不足 1 条时直接跳过该区块，不强行凑数。
 
 每条素材格式如下：
 
@@ -163,7 +182,7 @@ description: 搜索过去7天 AI 编程领域高信号动态（最新AI动态 / 
 
 ### 3. 输出
 
-**区块分隔**：三个区块之间用空行分隔，手机屏幕上一屏能看清边界。
+**区块分隔**：四个区块之间用空行分隔，手机屏幕上一屏能看清边界。
 
 **来源去重**：同一事件优先保留最一手来源（原推/官方博客），转发/回应作为上下文补充收录，不与原推重复列为两条。
 
@@ -171,13 +190,22 @@ description: 搜索过去7天 AI 编程领域高信号动态（最新AI动态 / 
 1. 重要性优先（🔴 > 🟡 > 🟢）
 2. 同级内按时间倒序（最新的在前）
 
-**数量限制**：最多输出 15 条。低于 3 条时说明本周动态较少，附一句简短说明。
+**数量限制**：最多输出 18 条。低于 3 条时说明本周动态较少，附一句简短说明。
 
 **末尾署名**：推送末尾加一行 `—— AI 技术雷达 · 自动生成`，便于转发时标识来源。
 
 **自动化推送模式**：当由龙虾/OpenClaw 定时触发时（检测到 PLATFORM=openclaw 或 cron 环境），只输出纯净推送素材，不附加任何解释性文字、思考过程、总结段落或确认提示。确保 stdout 内容可直接转发到企微群。
 
 ## 变更记录
+
+### 2026-05-26
+- 扩展内容范围：从纯 AI 编程产品动态扩展到包含协作范式、工程方法论、工具链（"上一层"内容）
+- 新增触发条件："AI工程实践"、"AI协作范式"、"AI工具链"
+- 新增独立区块"范式与工具"作为第四区块，上限 5 条，质量不足时跳过
+- 搜索策略：第 1 轮 5-6 次，第 2 轮补搜范式/工具，预留 2-3 次补搜容量
+- 新增高信号来源：Netflix/Spotify/Stripe Engineering Blog、Hacker News 深度帖
+- 新增搜索关键词：AI team workflow/collaboration（第1轮）、HN 工程帖（第2轮补搜）
+- 新增排除标准：纯理论讨论（无项目/团队/代码佐证）、工具软文（"10 个工具"类列表文）
 
 ### 2026-05-22
 - 试运行后评估，修复 3 项问题：
