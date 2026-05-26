@@ -1,0 +1,461 @@
+# Weekly-Report Skill Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Create a pure SKILL.md skill that collects data from git, svn, Claude Code sessions, and manual WeCom input, then synthesizes into a work-report-style weekly/monthly report in Markdown format.
+
+**Architecture:** Single SKILL.md file with embedded repo configuration. Claude executes git/svn commands via Bash, reads CC session metadata, waits for manual WeCom paste, then uses its reasoning to group by project, extract achievements, generate next-week plans, and enter a review loop before saving.
+
+**Tech Stack:** Pure SKILL.md (Open Agent Skills format), Bash commands for git/svn, Claude reasoning for synthesis.
+
+---
+
+## File Structure
+
+| File | Action | Responsibility |
+|------|--------|----------------|
+| `skills/weekly-report/SKILL.md` | Create | Core skill definition — all logic in one file |
+| `reports/.gitkeep` | Create | Empty reports directory placeholder |
+
+Each task below is bite-sized (2-5 minutes). Complete and verify before moving on.
+
+---
+
+### Task 1: Create Directory Structure
+
+**Files:**
+- Create: `skills/weekly-report/` (directory)
+- Create: `reports/.gitkeep`
+
+- [ ] **Step 1: Create skill directory and reports placeholder**
+
+```bash
+mkdir -p skills/weekly-report
+echo "" > reports/.gitkeep
+```
+
+- [ ] **Step 2: Verify**
+
+```bash
+ls skills/weekly-report/
+ls reports/
+```
+
+Expected: `skills/weekly-report/` exists (empty), `reports/.gitkeep` exists.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add skills/weekly-report/ reports/.gitkeep
+git commit -m "feat: add weekly-report skill directory structure"
+```
+
+---
+
+### Task 2: Write SKILL.md Frontmatter + Triggers + Configuration
+
+**Files:**
+- Create: `skills/weekly-report/SKILL.md` (new file, lines 1-40)
+
+- [ ] **Step 1: Write frontmatter, title, triggers, and configuration section**
+
+This establishes the skill identity, trigger keywords, and the embedded repo config template.
+
+```markdown
+---
+name: weekly-report
+description: Use when generating weekly or monthly work reports from git/svn/Claude Code/WeCom data sources. Trigger when the user asks to write a weekly report, monthly report, work summary, or generates a report.
+---
+
+# Weekly-Report
+
+从多个数据源（git 提交、svn 提交、Claude Code 会话、企微手工总结）采集数据，智能归纳为工作汇报风格的周报/月报。
+
+## 触发条件
+
+用户提到以下关键词时激活：
+- "写周报"、"生成本周总结"、"weekly report"
+- "写月报"、"生成本月总结"、"monthly report"
+- "生成报告"、"工作汇报"
+
+## 配置 - 仓库列表
+
+以下为 Git 仓库路径和对应的项目名称（用于报告分组标题）。**按需修改为你实际的路径**：
+
+```yaml
+git_repos:
+  - path: "D:\\代码\\repo-a"
+    name: "C端交易系统"
+  - path: "D:\\代码\\repo-b"
+    name: "资金AI"
+  - path: "D:\\代码\\git_public\\my-skills"
+    name: "IT基础设施"
+```
+
+以下为 SVN 仓库路径和对应的项目名称：
+
+```yaml
+svn_repos:
+  - path: "svn://your-server/repo-c"
+    name: "柜台债"
+  - path: "svn://your-server/repo-d"
+    name: "柜台债工程化"
+```
+
+**配置说明：**
+- `path`：仓库在本机的绝对路径（Windows 路径用双反斜杠 `\\`）
+- `name`：报告中显示的项目分组名称（中文）
+- 增删仓库时，直接编辑 SKILL.md 中的配置区
+- 某项目本周无动静的，不显示该分组标题
+```
+
+- [ ] **Step 2: Verify**
+
+Check the file exists and frontmatter parses:
+
+```bash
+head -5 skills/weekly-report/SKILL.md
+```
+
+Expected: `---` on line 1, `name: weekly-report` on line 2.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add skills/weekly-report/SKILL.md
+git commit -m "feat: add weekly-report SKILL.md with frontmatter, triggers, and repo config"
+```
+
+---
+
+### Task 3: Write SKILL.md Workflow Steps 1-2 (Time Range + Data Collection)
+
+**Files:**
+- Modify: `skills/weekly-report/SKILL.md` (append after configuration section)
+
+- [ ] **Step 1: Append data collection workflow**
+
+This section defines how to determine time range, collect git/svn data, and read CC session metadata.
+
+```markdown
+
+## 工作流程
+
+### Step 1: 确定时间范围
+
+询问用户："周报还是月报？"
+
+- **周报**：最近 7 天，从本周一起至今天
+- **月报**：最近 30 天
+- 用户也可手动指定起止日期，如"从上周五到这周三"
+
+确定时间后，计算具体的 `start_date` 和 `end_date`（YYYY-MM-DD 格式），向用户确认：
+> "时间范围确认：{start_date} ~ {end_date}，是否正确？"
+
+### Step 2: 采集数据
+
+确认时间范围后，并行采集以下数据源。
+
+#### 2.1 Git 提交采集
+
+遍历配置中的每个 `git_repos`，对每个仓库执行：
+
+```bash
+cd "仓库path" && git log --after="start_date" --before="end_date +1天" --author="当前git用户名" --pretty=format:"%H|%ai|%s" --name-status
+```
+
+如果仓库路径不存在，跳过并在末尾汇总中记录"未找到：路径"。
+如果返回为空（无提交），记录"该仓库本周无提交"，继续下一个。
+
+#### 2.2 SVN 提交采集
+
+遍历配置中的每个 `svn_repos`，对每个仓库执行：
+
+```bash
+svn log -r "{start_date}:{end_date +1天}" "仓库path"
+```
+
+如果路径不存在或无权限，跳过并记录"未找到/无权限：路径"。
+
+#### 2.3 Claude Code 会话采集
+
+读取 `~/.claude/sessions/` 目录下的 JSON 文件，筛选 `startedAt` 时间在目标范围内的会话。
+
+```bash
+# 列出 sessions 目录
+ls ~/.claude/sessions/
+```
+
+对每个 session JSON 文件，读取 `startedAt`（毫秒时间戳）、`cwd`（工作目录）、`sessionId`。
+按 `cwd` 判断该会话属于哪个项目分组（匹配 git_repos 中的 path）。
+
+汇总格式：
+| 日期 | 会话主题（从首条 prompt 概括） | 工作目录 | 关联项目 |
+
+如果 sessions 目录不存在或为空，跳过 CC 分析，不影响其他数据源。
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add skills/weekly-report/SKILL.md
+git commit -m "feat: add workflow steps 1-2 (time range + data collection)"
+```
+
+---
+
+### Task 4: Write SKILL.md WeCom Collection + Synthesis Rules
+
+**Files:**
+- Modify: `skills/weekly-report/SKILL.md` (append after Step 2)
+
+- [ ] **Step 1: Append WeCom collection and synthesis rules**
+
+This section defines how to request manual WeCom content, then how to group, summarize, and extract achievements from all raw data.
+
+```markdown
+
+#### 2.4 企微总结采集
+
+数据采集完成后，提示用户：
+> "已完成 git/svn/CC 数据采集。请粘贴你的企微工作总结内容（如有），粘贴完成后我将开始生成报告。如无企微内容，回复'无'即可。"
+
+等待用户粘贴。用户回复"无"或直接跳过时，继续下一步。
+
+### Step 3: 智能分析与分组归纳
+
+采集完所有原始数据后，按以下规则处理：
+
+#### 3.1 按项目分组
+
+- 每个 git/svn 提交和 CC 会话，根据其所属仓库归入配置中对应的项目分组
+- 无法归入任何已配置仓库的条目，归入"其他"分组
+- 某项目本周无任何动静的，不显示该分组标题
+
+#### 3.2 成果提取规则
+
+将原始 commit message 和 session 内容转化为成果陈述句：
+
+- **动词开头**：每条以"完成/完善/修复/优化/推进/沉淀/补齐/协同/调研/部署/接入/扩展"等动词开头
+- **成果结尾**：以具体成果结尾（"支持 XX 能力"、"提升 YY 效率"、"解决 ZZ 问题"）
+- **合并同类项**：同一项目下多个小提交合并为一条成果。例如 5 个提交都在修同一个 bug → "修复 XX 问题，提升稳定性"
+- **从 diff 看实质**：不仅复述 commit message，还要结合 --name-status 判断实际做了什么（如 "feat: add login" → "完成登录模块开发"）
+- **重要性排序**：同项目内按重要性从高到低排列，不按时间顺序
+- **剔除噪音**：merge commit、格式调整、依赖升级等不单独列为成果，除非改动影响重大
+- **去 AI 味**：用务实的工程语言，避免"赋能"、"助力"、"打造"等空洞词汇
+
+#### 3.3 成果句式示例
+
+正确示例：
+- 完成 AI 协作文档体系重构，沉淀上下文协议、领域文档、决策记录及仓库级导航文档；
+- 完善 SVN 工作流和 AI 编程协作规范，提升复杂 C++ 项目的可维护性和协作效率；
+- 完成柜台债独立 SO 模块建设，支持独立编译、组件注册和后续接口扩展；
+- 补齐柜台债 C++ 开发工程化能力，解决编译链路、编码规范、组件注册和本地验证环境问题；
+- 完成产品估值表查询接口接入 API 网关，并同步完善配套文档；
+- 优化定时任务调度框架，提升数据同步任务的性能、稳定性和文件写入可靠性。
+
+错误示例（避免）：
+- ~~本周进行了 3 次 git 提交~~（过程数据，不是成果）
+- ~~赋能团队协作文档体系~~（空洞词汇）
+- ~~打造了全新的 SO 模块~~（"打造"过于空泛，用"完成"更务实）
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add skills/weekly-report/SKILL.md
+git commit -m "feat: add WeCom collection and synthesis rules"
+```
+
+---
+
+### Task 5: Write SKILL.md Report Template + Next-Week Planning
+
+**Files:**
+- Modify: `skills/weekly-report/SKILL.md` (append after synthesis rules)
+
+- [ ] **Step 1: Append report template and next-week planning rules**
+
+This defines the exact Markdown template and how to generate next-week plans from current progress.
+
+```markdown
+
+### Step 4: 生成报告初稿
+
+按以下模板生成报告，同时在终端打印完整内容进入审核环节。
+
+#### 报告模板
+
+```markdown
+# 周报 · YYYY-MM-DD ~ YYYY-MM-DD
+
+## 一、本周进度
+
+<项目名称1>：
+1、<成果1>；
+2、<成果2>。
+
+<项目名称2>：
+1、<成果1>；
+2、<成果2>。
+
+## 二、下周计划
+
+<!-- 以下为自动生成初稿，请根据实际情况调整 -->
+
+<项目名称1>：
+1、<延续性计划1>。
+
+<项目名称2>：
+1、<延续性计划1>。
+
+## 三、补充说明
+
+（自由文本区，可选手写：问题、风险、待办事项等）
+```
+
+**格式要求：**
+- 编号使用中文顿号：`1、2、3、`
+- 每条以分号 `；` 结尾，最后一条以句号 `。` 结尾
+- 项目分组标题后用中文冒号：`C端交易系统：`
+- 区块之间空一行
+
+#### 下周计划生成规则
+
+基于本周各项目进度，推断下周合理的延续方向：
+
+- **延续性**：本周"完成开发"→ 下周"测试上线/联调"；本周"调研分析"→ 下周"提炼规范/模板"；本周"部署接入"→ 下周"能力验证"
+- **保守推断**：不编造项目中不存在的功能方向，只基于本周实际工作推断自然延续
+- **标注为初稿**：下周计划区域顶部加 HTML 注释 `<!-- 以下为自动生成初稿，请根据实际情况调整 -->`，提示用户这是草稿
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add skills/weekly-report/SKILL.md
+git commit -m "feat: add report template and next-week planning rules"
+```
+
+---
+
+### Task 6: Write SKILL.md Review Loop + Save + Error Handling
+
+**Files:**
+- Modify: `skills/weekly-report/SKILL.md` (append after report template)
+
+- [ ] **Step 1: Append review loop, save, and error handling sections**
+
+This completes the skill with the human review cycle, file saving, and error handling.
+
+```markdown
+
+### Step 5: 人工审核与调整
+
+生成初稿后，进入审核环节。
+
+**审核流程：**
+
+1. 在终端打印完整报告，然后询问：
+   > "报告初稿已完成，请检查是否有遗漏或需要调整的地方？
+   > - 可直接补充新条目（如'再加一条：完成了生产环境证书更新'）
+   > - 可告诉我修改哪一条（如'改第3条'、'删掉柜台债那条'）
+   > - 可调整下周计划"
+
+2. 用户补充或修改时：
+   - 将新条目归入对应项目分组
+   - 修改已有条目时，只展示修改涉及的部分，不重复打印整份报告
+   - 用户调整下周计划时，实时更新
+
+3. 循环确认：每次修改后继续询问，直到用户说"可以了"/"确认"/"保存"/"没问题"/"就这样"
+
+4. **审核上限**：最多 3 轮。超过 3 轮后提醒用户：
+   > "已进行 3 轮调整。如需进一步修改，可在保存后的文件中直接编辑。"
+
+5. 用户肯定回复时，进入 Step 6 保存环节。
+
+**审核交互原则：**
+- 打印报告时显示编号，方便用户引用
+- 不要每次修改后都重复打印整份报告，只展示修改涉及的部分
+- 保持简洁，避免反复确认"这样可以吗"之类的冗余对话
+
+### Step 6: 保存报告
+
+用户确认后，执行以下操作：
+
+1. 确定文件名：
+   - 周报：`reports/YYYY-MM-DD-weekly.md`（使用本周周一日期）
+   - 月报：`reports/YYYY-MM-monthly.md`（使用当月 1 日日期）
+
+2. 将审核后的完整报告内容写入文件。注意：文件编码为 UTF-8（不带 BOM），换行符为 LF。
+
+3. 在终端输出确认：
+   > "报告已保存至 `reports/YYYY-MM-DD-weekly.md`，可直接复制粘贴到企微。"
+
+4. 询问：
+   > "是否需要通过飞书文档 skill 创建在线文档版本？"
+   
+   如果用户确认，调用 `lark-doc` skill 创建飞书文档。
+```
+
+- [ ] **Step 2: Append error handling**
+
+```markdown
+
+## 错误处理
+
+1. **仓库不存在**：跳过该仓库，在报告末尾补充说明中列出"未找到：路径"
+2. **无 git/svn 权限**：跳过，不报错阻断流程
+3. **无 session 日志**：跳过 CC 分析，在报告中省略该区块
+4. **企微内容为空**：不强制要求，正常生成
+5. **所有数据源均为空**：生成空报告框架，提醒用户"本周暂无自动化采集到的数据，请在报告中手动补充"
+6. **报告保存失败**：在终端打印完整报告内容，让用户手动复制保存
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add skills/weekly-report/SKILL.md
+git commit -m "feat: add review loop, save, and error handling sections"
+```
+
+---
+
+### Task 7: Deploy and Verify
+
+**Files:**
+- Modified: `skills/weekly-report/SKILL.md` (complete file)
+
+- [ ] **Step 1: Verify SKILL.md completeness**
+
+```bash
+cat skills/weekly-report/SKILL.md | Measure-Object -Line
+```
+
+Expected: 200+ lines. Check all required sections exist:
+
+```bash
+Select-String -Path "skills/weekly-report/SKILL.md" -Pattern "Step [1-6]:|工作流程|错误处理|触发条件|配置" | Select-Object LineNumber, Line
+```
+
+Expected output should show all 6 steps, workflow, error handling, triggers, and config sections.
+
+- [ ] **Step 2: Deploy skill**
+
+```powershell
+.\deploy.ps1 -Skill weekly-report -Target claude-code
+```
+
+- [ ] **Step 3: Verify deployment**
+
+```powershell
+.\deploy.ps1 -List
+```
+
+Expected: `weekly-report` shows as installed for `claude-code`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add skills/weekly-report/SKILL.md
+git commit -m "feat: complete weekly-report skill, ready for deployment"
+```
