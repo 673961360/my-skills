@@ -16,13 +16,11 @@ description: Use when generating weekly or monthly work reports from git/svn/Cla
 
 ## 配置 - 仓库列表
 
-以下为 Git 仓库路径和对应的项目名称（用于报告分组标题）。**按需修改为你实际的路径**：
+以下为 Git 仓库路径和对应的项目名称（用于报告分组标题）：
 
 ```yaml
 git_repos:
-  - path: "D:\\代码\\repo-a"
-    name: "C端交易系统"
-  - path: "D:\\代码\\repo-b"
+  - path: "D:\\代码\\资金AI\\tradercode"
     name: "资金AI"
   - path: "D:\\代码\\git_public\\my-skills"
     name: "IT基础设施"
@@ -32,10 +30,8 @@ git_repos:
 
 ```yaml
 svn_repos:
-  - path: "svn://your-server/repo-c"
-    name: "柜台债"
-  - path: "svn://your-server/repo-d"
-    name: "柜台债工程化"
+  - path: "D:\\代码\\C端代码"
+    name: "机器猫C端"
 ```
 
 **配置说明：**
