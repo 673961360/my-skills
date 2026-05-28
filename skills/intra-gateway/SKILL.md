@@ -18,6 +18,7 @@ description: Use when accessing internal network resources through the intra-gat
 - 根据外网代码排查内网服务 bug
 - 调用内网 HTTP 接口（GET/POST/PUT/DELETE）
 - 上传部署包到内网
+- 升级跳板机 MCP Server
 
 ## 可用 MCP Tools
 
@@ -29,6 +30,7 @@ description: Use when accessing internal network resources through the intra-gat
 | `query_oracle` | 只读 SQL 查询 | `db_name`, `sql`（仅 SELECT） |
 | `list_logs` | 查找日志文件位置 | `server_name`, `service_name` |
 | `send_http` | 内网 HTTP 请求 | `url`, `method`, `headers`, `body` |
+| `self_upgrade` | 自助升级（替换代码+重启） | `package_path`, `deploy_dir`, `port` |
 
 ## 配置
 
@@ -64,3 +66,10 @@ MCP Server 连接信息在 `~/.claude/settings.json` 的 `mcpServers` 中：
 ## 目标服务器列表
 
 在 `config.json` 的 `targets` 中定义，通过 `list_logs` 或 `exec_ssh` 的 `server_name` 参数引用。
+
+## 升级 MCP Server 流程
+
+1. 在外网将新版本代码打包为 `src.tar.gz`（包含 `src/` 和 `pyproject.toml`）
+2. 通过 `exec_ssh` 或 `send_http` 上传到跳板机临时目录
+3. 调用 `self_upgrade` 触发升级（替换代码 → 备份旧版 → 重启）
+4. 等待 3 秒后验证：`send_http` 调 `http://跳板机:8765/mcp` 确认服务恢复

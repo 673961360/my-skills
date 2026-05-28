@@ -5,3 +5,17 @@ __pycache__/
 .DS_Store
 *.log
 *.stackdump
+
+# Local AI skill deployment (junctions/copies, not source)
+.claude/
+.agents/
+
+# Skill marketplace lock file
+skills-lock.json
+
+# Generated reports
+reports/
+
+# Temp/cache directories
+tmp/
+cache/

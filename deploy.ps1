@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Creates junctions (Windows symlinks) to deploy skills to target platforms.
-    Supports Claude Code (~/.agents/skills) and Codex (~/.codex/skills).
+    Supports Claude Code (~/.agents/skills + ~/.claude/skills) and Codex (~/.codex/skills).
 
     QwenPaw is intentionally excluded from auto-deploy because it uses a
     centralized skill.json index in skill_pool/. Manual verification required
@@ -49,9 +49,14 @@ $SkillsDir = Join-Path $ScriptRoot "skills"
 
 # Global skill directories for each platform
 $Targets = @{
-    # Claude Code uses the cross-agent standard location (~/.agents/skills)
-    "claude-code" = Join-Path $env:USERPROFILE ".agents\skills"
-    "codex"       = Join-Path $env:USERPROFILE ".codex\skills"
+    # Claude Code uses BOTH the cross-agent standard location AND its native skills dir
+    "claude-code"       = @(
+        (Join-Path $env:USERPROFILE ".agents\skills"),
+        (Join-Path $env:USERPROFILE ".claude\skills")
+    )
+    "codex"             = @(
+        (Join-Path $env:USERPROFILE ".codex\skills")
+    )
     # QwenPaw excluded: uses centralized skill.json index, auto-discovery unverified
 }
 
@@ -70,16 +75,19 @@ function Get-AvailableSkills {
 function Get-DeployedSkills {
     $deployed = @{}
     foreach ($platform in $Targets.Keys) {
-        $targetDir = $Targets[$platform]
-        if (Test-Path $targetDir) {
-            $links = Get-ChildItem -Path $targetDir -Directory | Where-Object {
-                $_.Attributes -match "ReparsePoint"
-            }
-            foreach ($link in $links) {
-                if (-not $deployed.ContainsKey($link.Name)) {
-                    $deployed[$link.Name] = @()
+        foreach ($targetDir in $Targets[$platform]) {
+            if (Test-Path $targetDir) {
+                $links = Get-ChildItem -Path $targetDir -Directory | Where-Object {
+                    $_.Attributes -match "ReparsePoint"
                 }
-                $deployed[$link.Name] += $platform
+                foreach ($link in $links) {
+                    if (-not $deployed.ContainsKey($link.Name)) {
+                        $deployed[$link.Name] = @()
+                    }
+                    if ($platform -notin $deployed[$link.Name]) {
+                        $deployed[$link.Name] += $platform
+                    }
+                }
             }
         }
     }
@@ -112,42 +120,46 @@ function Deploy-Skill {
     )
 
     $sourceDir = Join-Path $SkillsDir $SkillName
-    $targetDir = $Targets[$Platform]
+    $targetDirs = $Targets[$Platform]
 
     if (-not (Test-Path $sourceDir)) {
         Write-Host "Error: Skill '$SkillName' not found" -ForegroundColor Red
         return $false
     }
 
-    if (-not (Test-Path $targetDir)) {
-        Write-Host "Target directory not found, creating: $targetDir" -ForegroundColor Yellow
-        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-    }
+    $allSuccess = $true
+    foreach ($targetDir in $targetDirs) {
+        if (-not (Test-Path $targetDir)) {
+            Write-Host "Target directory not found, creating: $targetDir" -ForegroundColor Yellow
+            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+        }
 
-    $linkPath = Join-Path $targetDir $SkillName
+        $linkPath = Join-Path $targetDir $SkillName
 
-    if (Test-Path $linkPath) {
-        $item = Get-Item $linkPath
-        if ($item.Attributes -match "ReparsePoint") {
-            Write-Host "  [SKIP] $SkillName already deployed to $Platform" -ForegroundColor Green
-            return $true
+        if (Test-Path $linkPath) {
+            $item = Get-Item $linkPath
+            if ($item.Attributes -match "ReparsePoint") {
+                Write-Host "  [SKIP] $SkillName already deployed to $targetDir" -ForegroundColor Green
+                continue
+            } else {
+                Write-Host "  [WARN] $linkPath exists but is not a symlink" -ForegroundColor Red
+                $allSuccess = $false
+                continue
+            }
+        }
+
+        # Create Junction (Windows directory symlink)
+        Write-Host "  [DEPLOY] $SkillName -> $targetDir" -ForegroundColor Cyan
+        $result = cmd /c mklink /J "`"$linkPath`"" "`"$sourceDir`""
+
+        if (Test-Path $linkPath) {
+            Write-Host "  [OK] $SkillName deployed to $targetDir" -ForegroundColor Green
         } else {
-            Write-Host "  [WARN] $linkPath exists but is not a symlink" -ForegroundColor Red
-            return $false
+            Write-Host "  [FAIL] Failed to deploy $SkillName to $targetDir" -ForegroundColor Red
+            $allSuccess = $false
         }
     }
-
-    # Create Junction (Windows directory symlink)
-    Write-Host "  [DEPLOY] $SkillName -> $Platform" -ForegroundColor Cyan
-    $result = cmd /c mklink /J "`"$linkPath`"" "`"$sourceDir`""
-
-    if (Test-Path $linkPath) {
-        Write-Host "  [OK] $SkillName deployed to $Platform" -ForegroundColor Green
-        return $true
-    } else {
-        Write-Host "  [FAIL] Failed to deploy $SkillName to $Platform" -ForegroundColor Red
-        return $false
-    }
+    return $allSuccess
 }
 
 function Uninstall-Skill {
@@ -156,17 +168,19 @@ function Uninstall-Skill {
         [string]$Platform
     )
 
-    $targetDir = $Targets[$Platform]
-    $linkPath = Join-Path $targetDir $SkillName
+    $targetDirs = $Targets[$Platform]
+    foreach ($targetDir in $targetDirs) {
+        $linkPath = Join-Path $targetDir $SkillName
 
-    if (-not (Test-Path $linkPath)) {
-        Write-Host "  [SKIP] $SkillName not deployed to $Platform" -ForegroundColor Yellow
-        return
+        if (-not (Test-Path $linkPath)) {
+            Write-Host "  [SKIP] $SkillName not deployed to $targetDir" -ForegroundColor Yellow
+            continue
+        }
+
+        Write-Host "  [REMOVE] $SkillName from $targetDir" -ForegroundColor Cyan
+        cmd /c rmdir "`"$linkPath`"" | Out-Null
+        Write-Host "  [DONE] Removed $SkillName from $targetDir" -ForegroundColor Green
     }
-
-    Write-Host "  [REMOVE] $SkillName from $Platform" -ForegroundColor Cyan
-    cmd /c rmdir "`"$linkPath`"" | Out-Null
-    Write-Host "  [DONE] Removed $SkillName from $Platform" -ForegroundColor Green
 }
 
 # ============================================================
