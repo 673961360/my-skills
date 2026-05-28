@@ -16,6 +16,7 @@ description: Use when accessing internal network resources through the intra-gat
 - 查询内网 Oracle 数据库表
 - 重启/操作内网 Linux/Windows 服务
 - 根据外网代码排查内网服务 bug
+- 调用内网 HTTP 接口（GET/POST/PUT/DELETE）
 - 上传部署包到内网
 
 ## 可用 MCP Tools
@@ -27,6 +28,7 @@ description: Use when accessing internal network resources through the intra-gat
 | `grep_log` | 搜索日志（关键词+时间范围） | `server_name`, `keyword`, `time_from`, `time_to` |
 | `query_oracle` | 只读 SQL 查询 | `db_name`, `sql`（仅 SELECT） |
 | `list_logs` | 查找日志文件位置 | `server_name`, `service_name` |
+| `send_http` | 内网 HTTP 请求 | `url`, `method`, `headers`, `body` |
 
 ## 配置
 
