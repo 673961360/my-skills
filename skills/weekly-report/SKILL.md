@@ -24,6 +24,9 @@ git_repos:
     name: "资金AI"
   - path: "D:\\代码\\git_public\\my-skills"
     name: "IT基础设施"
+  - path: "D:\\代码\\git_public\\intra-gateway"
+    name: "VDI环境机器猫C端问题排查MCP网关"
+    desc: "为AI提供查询内部管控环境日志和测试数据的能力，用于方便AI协助定位C端问题"
 ```
 
 以下为 SVN 仓库路径和对应的项目名称：
@@ -32,6 +35,8 @@ git_repos:
 svn_repos:
   - path: "D:\\代码\\C端代码"
     name: "机器猫C端"
+  - path: "D:\\svndata\\nomal_C_code\\AI\\Skills"
+    name: "资金AI"
 ```
 
 **配置说明：**
@@ -128,6 +133,7 @@ ls ~/.claude/sessions/
 - **从 diff 看实质**：不仅复述 commit message，还要结合 --name-status 判断实际做了什么（如 "feat: add login" → "完成登录模块开发"）
 - **重要性排序**：同项目内按重要性从高到低排列，不按时间顺序
 - **剔除噪音**：merge commit、格式调整、依赖升级等不单独列为成果，除非改动影响重大
+- **过滤 SVN merge 提交**：SVN log 中包含 "Merged revision" 关键词的条目（从主干合入分支的过程记录）不是个人工作产出，必须过滤掉，不纳入成果统计
 - **去 AI 味**：用务实的工程语言，避免"赋能"、"助力"、"打造"、"全面升级"等空洞词汇
 
 #### 3.3 成果句式示例

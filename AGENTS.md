@@ -69,11 +69,21 @@ Skills 通过创建符号链接（Windows Junction）部署到各平台的全局
 
 ### 目标目录
 
-| 平台 | 路径 | 自动部署 |
-|------|------|----------|
-| Claude Code | `%USERPROFILE%\.agents\skills\` | 支持 |
-| Codex | `%USERPROFILE%\.codex\skills\` | 支持 |
-| QwenPaw | `%USERPROFILE%\.qwenpaw\skill_pool\` | 暂不支持（使用集中 skill.json 索引，需手动验证自动发现能力） |
+| 平台 | 路径 | 自动部署 | 备注 |
+|------|------|----------|------|
+| Claude Code | `%USERPROFILE%\.agents\skills\` | 支持 | Open Agent Skills 跨平台标准目录 |
+| Codex | `%USERPROFILE%\.codex\skills\` | 支持 | SKILL.md 格式兼容 |
+| QwenPaw | `%USERPROFILE%\.qwenpaw\skill_pool\` | 暂不支持 | 使用集中 skill.json 索引，需手动验证自动发现能力 |
+
+### QwenPaw 特殊说明
+
+QwenPaw 的 skill 安装**不是通过符号链接**，而是通过"技能池"机制：
+
+1. 将 `SKILL.md` 复制到 `C:\Users\mowenbo\.qwenpaw\skill_pool\<skill-name>\` 目录
+2. 在 `skill_pool\skill.json` 的 `skills` 对象中添加注册条目（`source: "customized"`）
+3. 在 QwenPaw 控制台选择"从技能池载入"该 skill
+
+`skill.json` 中的 `description` 字段必须包含用户会说的中文关键词（如 "AI技术雷达"），否则 skill 发现机制无法匹配。更新 SKILL.md 后必须同步更新 `skill.json` 中的对应字段。
 
 ### 使用 deploy.ps1
 
