@@ -96,6 +96,32 @@ QwenPaw 的 skill 安装**不是通过符号链接**，而是通过"技能池"�
 .\deploy.ps1 -Skill <slug> -Uninstall                     # 移除符号链接
 ```
 
+## 第三方 Skills 更新
+
+本机安装了两类第三方 skills，更新方式不同。
+
+### GitHub 源 Skills（通过 npx skills 管理）
+
+由 `skills-lock.json` 追踪来源和版本，来自 obra/superpowers、mattpocock/skills、upstash/context7 等仓库。
+
+```bash
+npx skills update                          # 更新所有
+npx skills update -g                       # 仅全局
+npx skills update -p                       # 仅项目
+npx skills list -g                         # 列出已安装的全局 skills
+npx skills add <owner/repo> -g             # 安装新 skill
+npx skills remove <name> -g                # 移除 skill
+```
+
+实际安装位置为 `.agents/skills/`，`.claude/skills/` 下是对应的符号链接。
+
+### 插件源 Skills（通过 claude plugins 管理）
+
+```bash
+claude plugins update <plugin@source>      # 更新指定插件
+# 示例：claude plugins update frontend-design@claude-plugins-official
+```
+
 ## 公开 Skills 评估与吸收流程
 
 本仓库中的 skills 应定期与公开 skills 对比，吸收优秀模式。
