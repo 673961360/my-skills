@@ -73,17 +73,35 @@ Skills 通过创建符号链接（Windows Junction）部署到各平台的全局
 |------|------|----------|------|
 | Claude Code | `%USERPROFILE%\.agents\skills\` | 支持 | Open Agent Skills 跨平台标准目录 |
 | Codex | `%USERPROFILE%\.codex\skills\` | 支持 | SKILL.md 格式兼容 |
-| QwenPaw | `%USERPROFILE%\.qwenpaw\skill_pool\` | 暂不支持 | 使用集中 skill.json 索引，需手动验证自动发现能力 |
+| QwenPaw | `%USERPROFILE%\.qwenpaw\workspaces\<id>\skills\` | 支持 | 复制文件 + 注册 workspace skill.json，所有工作区 |
 
 ### QwenPaw 特殊说明
 
-QwenPaw 的 skill 安装**不是通过符号链接**，而是通过"技能池"机制：
+QwenPaw 通过 `deploy.ps1` 部署，机制与 Claude Code/Codex 不同：
+- **不走 skill_pool**，直接部署到所有 workspace 的 `skills/` 目录
+- 每次部署遍历 `~/.qwenpaw/workspaces/` 下所有工作区，复制文件并注册到 workspace 的 `skill.json`
+- 自动跳过 builtin skill，不会覆盖
 
-1. 将 `SKILL.md` 复制到 `C:\Users\mowenbo\.qwenpaw\skill_pool\<skill-name>\` 目录
-2. 在 `skill_pool\skill.json` 的 `skills` 对象中添加注册条目（`source: "customized"`）
-3. 在 QwenPaw 控制台选择"从技能池载入"该 skill
+两种来源的 skill 都可部署到 QwenPaw：
+- **自研 skill**：从 `skills/` 目录（默认，`-Source self`）
+- **全局开源 skill**：从 `~/.agents/skills/` 目录（`-Source global`）
 
-`skill.json` 中的 `description` 字段必须包含用户会说的中文关键词（如 "AI技术雷达"），否则 skill 发现机制无法匹配。更新 SKILL.md 后必须同步更新 `skill.json` 中的对应字段。
+`skill.json` 中的 `description` 字段应包含中文关键词以优化发现机制。首次部署时如未指定 `-Description`，会使用 SKILL.md 中的英文 description 作为兜底；后续更新时保留已有描述。
+
+#### SKILL.md 格式兼容性
+
+QwenPaw 的 customized skill 与 Claude Code 使用**完全相同的 SKILL.md 格式**（仅 `name` + `description` frontmatter + 正文指令）。QwenPaw 内置 skill 会额外带 `metadata.qwenpaw` 字段（emoji、requires 等），但自部署 skill 不需要。
+
+迁移可行性按 skill 类型分：
+
+| 类型 | 兼容性 | 说明 |
+|------|--------|------|
+| 纯文本指导型（brainstorming、grill-me 等） | 高 | 直接复制即可，不依赖任何平台特有功能 |
+| 引用工具名的 skill（TDD、debugging 等） | 中 | 需逐个评估工具名映射（如 Claude 的 `Bash` → QwenPaw 的 `execute_command`） |
+| 使用 hooks 的 skill（verification-before-completion 等） | 低 | QwenPaw 无 hooks 机制，需改写为纯指令引导 |
+| 第三方 GitHub 源 skill | 需评估 | 多数面向 Claude Code 编写，按上述类型逐个判断 |
+
+结论：本仓库自开发的纯指导型 skill 可以直接通过 `deploy.ps1 -Target qwenpaw` 部署到 QwenPaw 所有工作区。
 
 ### 使用 deploy.ps1
 
@@ -92,6 +110,9 @@ QwenPaw 的 skill 安装**不是通过符号链接**，而是通过"技能池"�
 ```powershell
 .\deploy.ps1 -List                                        # 列出所有 skills
 .\deploy.ps1 -Skill <slug> -Target claude-code            # 部署单个 skill
+.\deploy.ps1 -Skill <slug> -Target qwenpaw                # 部署到 QwenPaw（自研）
+.\deploy.ps1 -Skill <slug> -Target qwenpaw -Source global # 部署全局开源 skill 到 QwenPaw
+.\deploy.ps1 -Skill <slug> -Target qwenpaw -Description "中文描述"  # 指定中文发现描述
 .\deploy.ps1 -All                                         # 部署所有到所有平台
 .\deploy.ps1 -Skill <slug> -Uninstall                     # 移除符号链接
 ```
@@ -152,3 +173,5 @@ claude plugins update <plugin@source>      # 更新指定插件
 - 修改已有 skill 时，只改必要的行，不要"顺手改进"相邻代码
 - 吸收公开 skill 模式时，必须标注来源
 - 不要伪造"已成功"结论。验证不通过的，如实报告状态
+- 部署/卸载 skills 一律通过 `deploy.ps1`，不要手动复制文件或操作 skill.json
+- 部署到 QwenPaw 时注意区分来源：自研 skill 用默认 `-Source self`，全局开源 skill 用 `-Source global`

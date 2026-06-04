@@ -53,9 +53,11 @@ description: Use when <什么场景下触发>
 |------|----------|----------|------|
 | Claude Code | `~/.agents/skills/` | 支持 | Open Agent Skills 跨平台标准目录 |
 | Codex | `~/.codex/skills/` | 支持 | SKILL.md 格式兼容 |
-| QwenPaw | `~/.qwenpaw/skill_pool/` | 暂不支持 | 使用集中 skill.json 索引，需在控制台"从技能池载入" |
+| QwenPaw | `~/.qwenpaw/workspaces/<id>/skills/` | 支持 | 复制文件 + 注册 workspace skill.json，所有工作区 |
 
-> **QwenPaw 特殊流程**：不是符号链接部署。需要将 SKILL.md 复制到 `~/.qwenpaw/skill_pool/<skill-name>/`，在 `skill.json` 中注册条目，然后在控制台"从技能池载入"。`skill.json` 的 `description` 必须包含用户会说的中文关键词。
+> **QwenPaw 部署方式**：通过 `deploy.ps1` 自动完成。不走 skill_pool，直接部署到所有 workspace。支持两种来源：自研 skill（默认）和全局开源 skill（`-Source global`）。首次部署建议用 `-Description` 指定中文描述以优化发现机制。
+>
+> **格式兼容性**：QwenPaw customized skill 与 Claude Code 使用相同的 SKILL.md 格式。纯文本指导型 skill 可直接部署；引用平台特有工具名的 skill 需评估工具映射；第三方 skill 需逐个判断。详见 [AGENTS.md](AGENTS.md)。
 
 ## 目录结构
 
