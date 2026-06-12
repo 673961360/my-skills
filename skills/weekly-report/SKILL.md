@@ -21,12 +21,14 @@ description: Use when generating weekly or monthly work reports from git/svn/Cla
 ```yaml
 git_repos:
   - path: "D:\\代码\\资金AI\\tradercode"
-    name: "资金AI"
+    name: "交易部AI"
   - path: "D:\\代码\\git_public\\my-skills"
     name: "IT基础设施"
   - path: "D:\\代码\\git_public\\intra-gateway"
     name: "VDI环境机器猫C端问题排查MCP网关"
     desc: "为AI提供查询内部管控环境日志和测试数据的能力，用于方便AI协助定位C端问题"
+  - path: "D:\\智能信息服务\\回购代码\\uia"
+    name: "交易部AI"
 ```
 
 以下为 SVN 仓库路径和对应的项目名称：
@@ -35,8 +37,8 @@ git_repos:
 svn_repos:
   - path: "D:\\代码\\C端代码"
     name: "机器猫C端"
-  - path: "D:\\svndata\\nomal_C_code\\AI\\Skills"
-    name: "资金AI"
+  - path: "D:\\svndata\\nomal_C_code\\AI"
+    name: "交易部AI"
 ```
 
 **配置说明：**
