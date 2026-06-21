@@ -1,6 +1,6 @@
 # 操作手册
 
-> 日常生成日报/周报时读取本文件。
+> 生成交易日报的权威操作入口（`SKILL.md` 为薄入口，细节以本文件为准）。
 
 ## 生成日报
 
@@ -56,7 +56,7 @@ cd scripts && uv sync
 
 ## 配置文件
 
-`config.json` 关键字段：
+`config.json` 关键字段（完整脱敏模板见 `config.example.json`）：
 
 ```json
 {
@@ -67,8 +67,8 @@ cd scripts && uv sync
     "host": "10.191.0.178",
     "port": 5674,
     "service_name": "cjhx",
-    "user": "fm",
-    "password": "fm"
+    "user": "<oracle_user>",
+    "password": "<oracle_password>"
   }
 }
 ```
