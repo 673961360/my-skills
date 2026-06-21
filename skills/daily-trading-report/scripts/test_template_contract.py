@@ -544,6 +544,26 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("外部短评暂未获取", fallback_html)
         self.assertIn("A股市场收盘后外部短评样例。", provided_html)
 
+    def test_equity_market_section_renders_input_or_fallback_inside_single_unit(self):
+        fallback_html = render_sample_report()
+        provided_html = render_equity_market_sample_report()
+
+        fallback_pos = fallback_html.index('<div class="section-title">权益市场分析</div>')
+        fallback_next = fallback_html.index('<div class="section-title">一级市场分析</div>')
+        fallback_segment = fallback_html[fallback_pos:fallback_next]
+
+        provided_pos = provided_html.index('<div class="section-title">权益市场分析</div>')
+        provided_start = provided_html.rfind('<div class="section">', 0, provided_pos)
+        provided_next_title = provided_html.index('<div class="section-title">一级市场分析</div>')
+        provided_next = provided_html.rfind('<div class="section">', 0, provided_next_title)
+        provided_segment = provided_html[provided_start:provided_next]
+
+        self.assertIn("外部短评暂未获取", fallback_segment)
+        self.assertIn("A股市场收盘后外部短评样例。", provided_segment)
+        self.assertIn("数据来源：外部市场短评", provided_segment)
+        self.assertIn('<div class="analysis-box">', provided_segment)
+        self.assertEqual(1, provided_segment.count('<div class="section">'))
+
     def test_funding_market_structure_is_stable_without_money_data(self):
         html = render_sample_report()
 
