@@ -1,0 +1,14 @@
+[project]
+name = "daily-trading-report"
+version = "0.2.0"
+description = "交易部日报自动生成 - O32指令 + QT聊天短评 → 专业HTML交易日报"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31.0",
+    "jinja2>=3.1.0",
+    "matplotlib>=3.8.0",
+    "oracledb>=2.0.0",
+]
+
+[project.scripts]
+generate-report = "generate_report:main"

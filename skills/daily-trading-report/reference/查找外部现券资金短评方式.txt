@@ -1,0 +1,14 @@
+
+取聊天记录方式:
+SELECT * FROM ats.t_repo_robot_chatmessage t WHERE t.MSG_DATE = 20260618   查询当天的所有实时原文  其中channel = 1代表森浦qt  3代表通达信qt  4快确qt
+测试环境数据库地址:
+main_db_info:
+  user: 'fm'
+  pwd: 'fm'
+  addr: '10.191.0.178'
+  port: 5674
+  service_name: 'cjhx'
+  max_count: 5
+
+短评方式:
+建议为抽取17点后涉及资金、现券、一级发行的短评，注意同一个人应该去重，然后基于这些人的观点汇总成自己的观点。

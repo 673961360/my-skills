@@ -1,0 +1,24 @@
+{
+  "api_base_url": "https://your-ai-gateway-host/ai-gateway",
+  "api_key": "sk-your-api-key-here",
+  "output_dir": "reports",
+  "api_timeout": 60,
+  "api_max_retries": 3,
+  "chart_dpi": 100,
+  "chart_width": 800,
+  "chart_height": 400,
+  "oracle": {
+    "user": "fm",
+    "password": "your-password-here",
+    "host": "10.x.x.x",
+    "port": 5674,
+    "service_name": "cjhx",
+    "max_connections": 5,
+    "comment_table": "ats.t_repo_robot_chatmessage",
+    "channels": {
+      "1": "森浦QT",
+      "3": "通达信QT",
+      "4": "快确QT"
+    }
+  }
+}
