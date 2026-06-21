@@ -25,11 +25,62 @@ def _fmt_display_date(date_str: str) -> str:
     return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
 
 
+def _fmt_template_date(date_str: str) -> str:
+    """将 YYYYMMDD 转为参考模板标题区日期格式。"""
+    dt = datetime.strptime(date_str, "%Y%m%d")
+    return f"{dt.year}年{dt.month}月{dt.day}日"
+
+
 def _weekday_name(date_str: str) -> str:
     """返回星期几的中文名。"""
     days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
     dt = datetime.strptime(date_str, "%Y%m%d")
     return days[dt.weekday()]
+
+
+def build_forecast_accuracy_sections(trade_prices: dict) -> dict:
+    """Build forecast accuracy sections without inventing history-based metrics."""
+    placeholder = "历史预测数据不足，暂无法计算准确率"
+    return {
+        "trend_forecast": {
+            "available": False,
+            "data": {},
+            "reason": placeholder,
+        },
+        "interval_forecast": {
+            "available": False,
+            "data": {},
+            "reason": placeholder,
+        },
+    }
+
+
+def build_risk_tips(risk_warnings: list[dict]) -> list[str]:
+    """Build fixed compliance tips plus a lightweight dynamic risk summary."""
+    tips = [
+        "请密切关注明日到期回购资金的安排，提前做好头寸准备。",
+        "关注央行公开市场操作动向，合理安排资金交易节奏。",
+        "注意交易对手集中度风险，分散交易对手以降低信用风险。",
+    ]
+    if risk_warnings:
+        tips.insert(0, f"今日规则引擎识别到 {len(risk_warnings)} 条风险线索，请优先复核高等级事项。")
+    return tips
+
+
+def build_equity_market_analysis(commentary: str | None = None) -> dict:
+    """Build equity market analysis from external input or the contract fallback."""
+    text = (commentary or "").strip()
+    if text:
+        return {
+            "available": True,
+            "commentary": text,
+            "source": "external",
+        }
+    return {
+        "available": False,
+        "commentary": "外部短评暂未获取",
+        "source": "fallback",
+    }
 
 
 def collect_trade_instructions(query_date: str) -> list[dict]:
@@ -435,7 +486,7 @@ def aggregate_risk_warnings(
 
 
 def generate_market_commentary(qt_commentary: dict) -> dict:
-    """基于 QT 短评数据生成市场综合分析文字。
+    """基于 QT 短评数据生成资金、现券和一级市场分析文字。
 
     从资金面/现券/一级发行三个分类的短评中提取关键信息，
     生成结构化的市场分析文字。
@@ -449,15 +500,15 @@ def generate_market_commentary(qt_commentary: dict) -> dict:
     """
     if not qt_commentary or qt_commentary.get("total", 0) == 0:
         return {
-            "funding": "今日无资金面相关短评。",
-            "bond": "今日无现券相关短评。",
-            "primary": "今日无一级发行相关短评。",
+            "funding": "暂无有效消息",
+            "bond": "暂无有效消息",
+            "primary": "暂无有效消息",
         }
 
     def _analyze_funding(messages: list[dict]) -> str:
         """资金面分析。"""
         if not messages:
-            return "今日无资金面相关短评。"
+            return "暂无有效消息"
 
         # 统计关键词
         kw_freq: dict[str, int] = {}
@@ -518,7 +569,7 @@ def generate_market_commentary(qt_commentary: dict) -> dict:
     def _analyze_bond(messages: list[dict]) -> str:
         """现券分析。"""
         if not messages:
-            return "今日无现券相关短评。"
+            return "暂无有效消息"
 
         kw_freq: dict[str, int] = {}
         direction_keywords = {"买券": 0, "卖券": 0, "OFR": 0, "BID": 0}
@@ -565,7 +616,7 @@ def generate_market_commentary(qt_commentary: dict) -> dict:
     def _analyze_primary(messages: list[dict]) -> str:
         """一级发行分析。"""
         if not messages:
-            return "今日无一级发行相关短评。"
+            return "暂无有效消息"
 
         kw_freq: dict[str, int] = {}
         for msg in messages[:200]:
@@ -689,6 +740,7 @@ def collect_all(query_date: str | None = None) -> dict:
         # 基础信息
         "query_date": date_str,
         "display_date": display_date,
+        "template_date": _fmt_template_date(date_str),
         "weekday": weekday,
         "is_trading_day": trading_day,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -699,38 +751,28 @@ def collect_all(query_date: str | None = None) -> dict:
         # 板块 2：交易笔数（按小时）
         "trade_count_hourly": trade_count_hourly,
 
-        # 板块 3：交易价格汇总
+        # 01 交易数据汇总：交易金额仍由 O32 分类金额填充，价格数据保留给后续明细扩展
         "trade_prices": trade_prices,
 
-        # 板块 4：交收预测汇总
+        # 02 交收数据汇总
         "settlement_forecast": settlement_forecast,
 
-        # 板块 5：市场预测汇总（回购行情）
+        # 03 市场预测汇总（回购行情）
         "repo_rates": repo_rates,
 
-        # 板块 6-7：趋势/区间预测（用当日数据简化展示）
-        "trend_forecast": {
-            "available": bool(trade_prices),
-            "data": trade_prices if trade_prices else {},
-            "reason": "需积累历史时序数据，当前展示当日各品种利率分布",
-        },
-        "interval_forecast": {
-            "available": bool(trade_prices),
-            "data": {label: {"min": v["最低利率"], "max": v["最高利率"], "avg": v["平均利率"], "count": v["笔数"]}
-                     for label, v in trade_prices.items()} if trade_prices else {},
-            "reason": "需积累历史时序数据，当前展示当日利率区间（最小 - 最大）",
-        },
+        # 板块 6-7：趋势/区间预测准确率（没有历史预测数据时不使用当日价格替代）
+        **build_forecast_accuracy_sections(trade_prices),
 
-        # 板块 8：货币市场情况
+        # 04 资金市场分析
         "money_market": money_market,
 
-        # 板块 9：账户头寸
+        # 头寸附录数据，默认不进入主模板流
         "positions": positions,
 
-        # 板块 10：风险预警
+        # 规则引擎风险附录数据，默认不进入主模板流
         "risk_warnings": risk_warnings,
 
-        # 板块 9：市场综合分析（基于 QT 短评）
+        # 资金、现券、一级市场分析文字（基于 QT 短评）
         "market_commentary": market_commentary,
 
         # 板块 11：一级市场（无数据源）
@@ -739,10 +781,13 @@ def collect_all(query_date: str | None = None) -> dict:
             "reason": "暂无对应 API 数据源",
         },
 
-        # 板块 12：风险提示（待 AI 生成）
-        "risk_tips": "",
+        # 权益市场分析：由 AI 执行期外部短评输入，纯脚本运行时降级
+        "equity_market": build_equity_market_analysis(),
 
-        # QT 聊天短评（资金面/现券/一级发行市场短评）
+        # 风险提示
+        "risk_tips": build_risk_tips(risk_warnings),
+
+        # QT 聊天消息分类（资金面/现券/一级发行）
         "qt_commentary": qt_commentary,
 
         # 原始数据（供图表生成使用）

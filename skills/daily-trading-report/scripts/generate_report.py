@@ -28,7 +28,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_DIR))
 
 from api_client import get_config
-from data_collector import collect_all, _parse_date, _fmt_display_date
+from data_collector import collect_all, _parse_date, _fmt_display_date, build_equity_market_analysis
 from chart_builder import build_all_charts
 
 
@@ -57,6 +57,14 @@ def save_report(html_content: str, output_path: Path) -> Path:
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html_content)
     return output_path
+
+
+def load_equity_commentary(args: argparse.Namespace) -> str:
+    """Load optional externally supplied equity market commentary."""
+    if args.equity_commentary_file:
+        path = Path(args.equity_commentary_file)
+        return path.read_text(encoding="utf-8").strip()
+    return (args.equity_commentary or "").strip()
 
 
 def parse_args() -> argparse.Namespace:
@@ -88,6 +96,18 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="跳过图表生成（加速调试）",
     )
+    parser.add_argument(
+        "--equity-commentary",
+        type=str,
+        default="",
+        help="权益市场外部短评文本；未提供时显示固定降级文案",
+    )
+    parser.add_argument(
+        "--equity-commentary-file",
+        type=str,
+        default="",
+        help="读取权益市场外部短评的 UTF-8 文本文件；优先级高于 --equity-commentary",
+    )
     return parser.parse_args()
 
 
@@ -115,6 +135,8 @@ def main():
     # Step 2: 采集数据
     print(f"\n[2/4] 正在采集交易数据...")
     data = collect_all(query_date)
+    equity_commentary = load_equity_commentary(args)
+    data["equity_market"] = build_equity_market_analysis(equity_commentary)
 
     trading_status = "交易日 [OK]" if data["is_trading_day"] else "非交易日 [!]"
     print(f"  交易日判断：{trading_status}")
@@ -122,6 +144,7 @@ def main():
     print(f"  头寸记录数：{len(data.get('_positions', []))}")
     print(f"  交收记录数：{len(data.get('_settlement_rows', []))}")
     print(f"  风险预警数：{len(data.get('risk_warnings', []))}")
+    print(f"  权益短评：{'外部输入' if data['equity_market']['available'] else data['equity_market']['commentary']}")
 
     qt = data.get("qt_commentary", {})
     if qt.get("total"):

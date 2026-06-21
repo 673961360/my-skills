@@ -63,39 +63,6 @@ def _fig_to_base64(fig: plt.Figure) -> str:
 # ──────────────────────────────────────────────
 
 
-def build_trade_overview_chart(overview: dict) -> str:
-    """生成交易额度总览饼图。
-
-    Args:
-        overview: aggregate_trade_overview 返回的 dict
-    """
-    categories = overview.get("分类明细", {})
-    if not categories:
-        return ""
-
-    labels = list(categories.keys())
-    amounts = [v["指令金额"] for v in categories.values()]
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    colors = ["#4472C4", "#ED7D31", "#A5A5A5", "#FFC000", "#5B9BD5", "#70AD47"]
-    wedges, texts, autotexts = ax.pie(
-        amounts,
-        labels=labels,
-        autopct="%1.1f%%",
-        colors=colors[:len(labels)],
-        startangle=90,
-        textprops={"fontsize": 10},
-    )
-    for t in autotexts:
-        t.set_fontsize(9)
-        t.set_color("white")
-
-    ax.set_title("交易额度分布（按业务分类·委托方向）", fontsize=13, fontweight="bold", pad=15)
-    fig.tight_layout()
-    return _fig_to_base64(fig)
-
-
 def build_trade_count_chart(hourly_data: dict) -> str:
     """生成交易笔数按小时分布柱状图。
 
@@ -125,7 +92,7 @@ def build_trade_count_chart(hourly_data: dict) -> str:
 
     ax.set_xlabel("时间", fontsize=11)
     ax.set_ylabel("笔数", fontsize=11)
-    ax.set_title("当日交易笔数分布（按小时）", fontsize=13, fontweight="bold", pad=10)
+    ax.set_title("交易笔数（按小时）", fontsize=13, fontweight="bold", pad=10)
     ax.grid(axis="y", alpha=0.3)
     ax.set_ylim(0, max(counts) * 1.3 if counts else 10)
     fig.tight_layout()
@@ -226,47 +193,6 @@ def build_repo_rate_gauge(repo_rates: list[dict]) -> str:
     return _fig_to_base64(fig)
 
 
-def build_settlement_chart(forecast: dict) -> str:
-    """生成交收预测柱状图。
-
-    Args:
-        forecast: aggregate_settlement_forecast 返回的 dict
-    """
-    status_map = forecast.get("状态明细", {})
-    if not status_map:
-        return ""
-
-    labels = list(status_map.keys())
-    counts = [v["笔数"] for v in status_map.values()]
-
-    fig, ax = plt.subplots(figsize=(8, 4))
-
-    color_map = {
-        "成功": "#70AD47",
-        "进行中": "#FFC000",
-        "待处理": "#FFC000",
-        "失败": "#ED7D31",
-    }
-    colors = [color_map.get(l, "#4472C4") for l in labels]
-
-    bars = ax.bar(labels, counts, color=colors, width=0.5, edgecolor="white")
-    for bar, count in zip(bars, counts):
-        ax.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height() + 0.3,
-            str(count),
-            ha="center",
-            va="bottom",
-            fontsize=10,
-        )
-
-    ax.set_ylabel("笔数", fontsize=11)
-    ax.set_title("交收进度分布", fontsize=13, fontweight="bold", pad=10)
-    ax.grid(axis="y", alpha=0.3)
-    fig.tight_layout()
-    return _fig_to_base64(fig)
-
-
 def build_all_charts(data: dict) -> dict:
     """批量生成所有图表，返回 {图表名: base64字符串} dict。
 
@@ -275,23 +201,15 @@ def build_all_charts(data: dict) -> dict:
     """
     charts: dict[str, str] = {}
 
-    # 板块 1：交易额度分布饼图
-    overview = data.get("trade_overview", {})
-    charts["trade_overview"] = build_trade_overview_chart(overview)
-
-    # 板块 2：交易笔数柱状图
+    # 01 交易笔数柱状图
     hourly = data.get("trade_count_hourly", {})
     charts["trade_count"] = build_trade_count_chart(hourly)
 
-    # 板块 3：交易价格折线图
+    # 01 交易金额/利率折线图
     prices = data.get("trade_prices", {})
     charts["trade_price"] = build_trade_price_chart(prices)
 
-    # 板块 4：交收预测柱状图
-    settlement = data.get("settlement_forecast", {})
-    charts["settlement"] = build_settlement_chart(settlement)
-
-    # 板块 5：回购利率仪表盘
+    # 03 市场预测汇总回购利率图
     repo_rates = data.get("_repo_rates", [])
     charts["repo_rate"] = build_repo_rate_gauge(repo_rates)
 

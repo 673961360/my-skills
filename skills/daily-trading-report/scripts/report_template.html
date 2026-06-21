@@ -3,33 +3,62 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>创金合信基金交易部 · 交易日报 · {{ display_date }}（{{ weekday }}）</title>
+<title>创金合信基金交易部 · 交易日报 · {{ template_date | default(display_date) }}（{{ weekday }}）</title>
 <style>
   /* ── 全局 ── */
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
-    background: linear-gradient(180deg, #1a3a5c 0%, #2d5f8a 50%, #1a3a5c 100%);
+    background:
+      linear-gradient(115deg, rgba(255,255,255,0.18) 0 1px, transparent 1px 80px),
+      linear-gradient(70deg, rgba(105,190,236,0.20) 0 2px, transparent 2px 96px),
+      linear-gradient(160deg, rgba(255,255,255,0.24) 0%, transparent 28%),
+      linear-gradient(180deg, #77c6ed 0%, #2490cf 35%, #0873bd 70%, #55b6e4 100%);
     background-attachment: fixed;
+    background-size: auto, auto, auto, 100% 100%;
     color: #1a1a2e;
     line-height: 1.6;
-    padding: 20px 0;
+    padding: 18px 0;
     min-height: 100vh;
+    position: relative;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(128deg, transparent 0 42%, rgba(255,255,255,0.18) 42% 42.5%, transparent 42.5% 100%),
+      linear-gradient(106deg, transparent 0 56%, rgba(9,101,169,0.22) 56% 56.4%, transparent 56.4% 100%);
+    opacity: 0.8;
   }
 
   /* ── 容器 ── */
   .report-container {
-    max-width: 920px;
+    max-width: 680px;
     margin: 0 auto;
     background: transparent;
-    padding: 0 10px;
+    padding: 0 12px 0 46px;
+    position: relative;
+  }
+  .report-container::before {
+    content: "";
+    position: absolute;
+    left: 24px;
+    top: 132px;
+    bottom: 44px;
+    width: 2px;
+    background: rgba(255,255,255,0.62);
+    box-shadow: 0 0 0 1px rgba(40,118,181,0.15);
   }
 
   /* ─ 头部 ── */
   .header {
-    background: linear-gradient(135deg, #1a3a5c 0%, #2d5f8a 50%, #1a3a5c 100%);
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.18) 0 1px, transparent 1px 44px),
+      linear-gradient(135deg, #0f5d9b 0%, #1f8fd1 52%, #0f5d9b 100%);
     color: #fff;
-    padding: 32px 40px;
+    padding: 28px 30px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -37,24 +66,14 @@
     position: relative;
     overflow: hidden;
   }
-  .header::before {
-    content: "";
-    position: absolute;
-    top: -50%;
-    right: -10%;
-    width: 300px;
-    height: 300px;
-    background: rgba(255,255,255,0.05);
-    border-radius: 50%;
-  }
   .header-left h1 {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
     letter-spacing: 2px;
     text-shadow: 0 2px 4px rgba(0,0,0,0.2);
   }
   .header-left h2 {
-    font-size: 34px;
+    font-size: 30px;
     font-weight: 700;
     margin-top: 6px;
     letter-spacing: 4px;
@@ -75,30 +94,46 @@
 
   /* ── 板块通用 ── */
   .section {
-    padding: 14px 24px;
-    margin: 6px 10px;
+    padding: 14px 18px;
+    margin: 10px 4px 12px 16px;
     background: #fff;
-    border-radius: 6px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    border-radius: 4px;
+    border: 1px solid rgba(141,195,232,0.72);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08), 0 0 0 3px rgba(255,255,255,0.28);
+    position: relative;
+  }
+  .section::before {
+    content: "";
+    position: absolute;
+    left: -31px;
+    top: 18px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #2d8ad3;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.55);
   }
   .section:last-child { margin-bottom: 10px; }
   .section-title {
     font-size: 14px;
     font-weight: 700;
-    color: #1a3a5c;
+    color: #fff;
     margin-bottom: 12px;
-    padding-bottom: 6px;
-    border-bottom: 2px solid #2d5f8a;
-    display: flex;
+    padding: 6px 12px;
+    background: #1f6fae;
+    border-radius: 2px;
+    display: inline-flex;
     align-items: center;
     gap: 8px;
+    max-width: 100%;
   }
   .section-title .icon {
-    width: 26px;
-    height: 26px;
-    background: linear-gradient(135deg, #2d5f8a 0%, #1a3a5c 100%);
+    width: 24px;
+    height: 24px;
+    background: rgba(255,255,255,0.18);
     color: #fff;
-    border-radius: 50%;
+    border-radius: 2px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -107,25 +142,94 @@
     flex-shrink: 0;
     box-shadow: 0 2px 4px rgba(45,95,138,0.3);
   }
+  .template-subtitle {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a3a5c;
+    margin: 16px 0 8px;
+    padding: 4px 0 5px;
+    border-bottom: 2px solid #8dc3e8;
+  }
+  .inline-heading {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a3a5c;
+    margin: 18px 0 8px;
+  }
+  .muted-note {
+    color: #777;
+    font-size: 11px;
+    line-height: 1.6;
+    margin: 8px 0 10px;
+  }
+  .analysis-box {
+    color: #333;
+    font-size: 12px;
+    line-height: 1.85;
+    white-space: pre-wrap;
+    background: #fbfdff;
+    padding: 12px 14px;
+    border: 1px solid #cfe0ed;
+    border-radius: 3px;
+  }
+  .commentary-list {
+    padding: 10px 12px;
+    background: #fbfdff;
+    border: 1px solid #cfe0ed;
+    border-radius: 3px;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  .commentary-item {
+    padding: 7px 0;
+    border-bottom: 1px solid #e8eef4;
+    font-size: 12px;
+  }
+  .commentary-item:last-child { border-bottom: none; }
+  .commentary-meta {
+    color: #1f6fae;
+    font-weight: 700;
+    margin-right: 8px;
+  }
+  .risk-list {
+    list-style: none;
+    padding: 2px 0 0;
+    margin: 0;
+  }
+  .risk-list li {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 8px;
+    color: #c62828;
+    font-size: 12px;
+    line-height: 1.8;
+    padding: 8px 0;
+    border-bottom: 1px solid #f3d4d4;
+  }
+  .risk-list li:last-child { border-bottom: none; }
+  .risk-index {
+    font-weight: 700;
+    color: #b71c1c;
+  }
 
   /* ─ 表格 ── */
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 12px;
-    margin-top: 8px;
+    font-size: 11px;
+    margin-top: 6px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   }
   th, td {
     border: 1px solid #dde3ea;
-    padding: 7px 10px;
+    padding: 5px 7px;
     text-align: center;
   }
   th {
     background: linear-gradient(135deg, #2d5f8a 0%, #1a3a5c 100%);
     color: #fff;
     font-weight: 600;
-    font-size: 11px;
+    font-size: 10px;
     white-space: nowrap;
     letter-spacing: 0.3px;
   }
@@ -141,20 +245,15 @@
   .summary-cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 8px;
+    margin: 4px 0 14px;
   }
   .summary-card {
-    background: linear-gradient(135deg, #f0f4f8 0%, #e8ecf0 100%);
-    border-radius: 8px;
-    padding: 14px 16px;
-    border-left: 4px solid #2d5f8a;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    transition: transform 0.2s, box-shadow 0.2s;
-  }
-  .summary-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    background: #f7fbff;
+    border-radius: 2px;
+    padding: 10px 12px;
+    border: 1px solid #c9ddeb;
+    border-top: 3px solid #2d8ad3;
   }
   .summary-card .label {
     font-size: 11px;
@@ -170,6 +269,13 @@
     line-height: 1.2;
   }
   .summary-card .value.small { font-size: 16px; }
+  .metric-table th,
+  .metric-table td {
+    width: 33.333%;
+  }
+  .amount-table .amount-col {
+    min-width: 76px;
+  }
 
   /* ── 图表 ── */
   .chart-container {
@@ -177,7 +283,7 @@
     margin: 12px 0;
     padding: 10px;
     background: #fff;
-    border-radius: 6px;
+    border-radius: 4px;
     border: 1px solid #e8ecf0;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
   }
@@ -186,19 +292,6 @@
     height: auto;
     border-radius: 4px;
   }
-
-  /* ── 风险等级标签 ── */
-  .risk-tag {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 1.4;
-  }
-  .risk-high { background: #e74c3c; color: #fff; }
-  .risk-medium { background: #f39c12; color: #fff; }
-  .risk-low { background: #27ae60; color: #fff; }
 
   /* ── 空数据提示 ── */
   .empty-data {
@@ -217,21 +310,6 @@
     margin-bottom: 8px;
   }
 
-  /* ── 尾部 ── */
-  .footer {
-    background: linear-gradient(135deg, #1a3a5c 0%, #2d5f8a 100%);
-    color: #fff;
-    text-align: center;
-    padding: 20px 40px;
-    font-size: 12px;
-    margin-top: 10px;
-    border-top: 3px solid #2d5f8a;
-  }
-  .footer small {
-    opacity: 0.8;
-    font-size: 11px;
-  }
-
   /* ── 非交易日提示 ── */
   .non-trading-day {
     background: linear-gradient(135deg, #fef3cd 0%, #fff3cd 100%);
@@ -241,116 +319,41 @@
     font-size: 13px;
     font-weight: 600;
     border-left: 4px solid #f39c12;
-    margin: 6px 10px;
-    border-radius: 6px;
+    margin: 10px 4px 12px 16px;
+    border-radius: 4px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   }
-  .non-trading-day::before {
-    content: "⚠ ";
-    font-size: 16px;
-  }
-
-  /* ── QT 短评 ── */
-  .qt-tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-    border-bottom: 2px solid #e8ecf0;
-    flex-wrap: wrap;
-  }
-  .qt-tab {
-    padding: 8px 20px;
-    background: #f0f4f8;
-    border: 1px solid #dde3ea;
-    border-bottom: none;
-    border-radius: 8px 8px 0 0;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 600;
-    color: #666;
-    transition: all 0.2s;
-    position: relative;
-    top: 2px;
-  }
-  .qt-tab.active {
-    background: linear-gradient(135deg, #2d5f8a 0%, #1a3a5c 100%);
-    color: #fff;
-    border-color: #2d5f8a;
-    box-shadow: 0 -2px 4px rgba(45,95,138,0.2);
-  }
-  .qt-tab:hover:not(.active) {
-    background: #e8ecf0;
-    color: #1a3a5c;
-  }
-  .qt-channel-stats {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 14px;
-    font-size: 12px;
-    color: #666;
-    flex-wrap: wrap;
-  }
-  .qt-channel-stats span {
-    padding: 4px 12px;
-    background: linear-gradient(135deg, #f0f4f8 0%, #e8ecf0 100%);
-    border-radius: 12px;
-    font-weight: 600;
-    border: 1px solid #dde3ea;
-  }
-  .qt-panel {
-    display: none;
-  }
-  .qt-panel.active {
-    display: block;
-  }
-  .qt-panel-count {
-    font-size: 12px;
-    color: #999;
-    margin-bottom: 8px;
-  }
-  .qt-msg-list {
-    max-height: 500px;
-    overflow-y: auto;
-    border: 1px solid #e8ecf0;
-    border-radius: 8px;
-    background: #fafbfc;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);
-  }
-  .qt-msg {
-    padding: 12px 16px;
-    border-bottom: 1px solid #eef1f5;
-    font-size: 13px;
-    line-height: 1.6;
-    transition: background 0.2s;
-  }
-  .qt-msg:last-child { border-bottom: none; }
-  .qt-msg:hover { background: #f0f4f8; }
-  .qt-msg-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 6px;
-  }
-  .qt-msg-sender {
-    font-weight: 600;
-    color: #2d5f8a;
-    font-size: 12px;
-    padding: 2px 8px;
-    background: #e8ecf0;
-    border-radius: 4px;
-  }
-  .qt-msg-time {
-    font-size: 11px;
-    color: #999;
-    font-family: monospace;
-  }
-  .qt-msg-content {
-    color: #333;
-    word-break: break-all;
-    white-space: pre-wrap;
-    max-height: 120px;
-    overflow: hidden;
-    padding-left: 4px;
+  @media (max-width: 560px) {
+    body { padding: 10px 0; }
+    .report-container {
+      max-width: 100%;
+      padding: 0 8px 0 34px;
+    }
+    .report-container::before {
+      left: 18px;
+      top: 116px;
+    }
+    .header {
+      padding: 22px 18px;
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .header-left h1 { font-size: 17px; }
+    .header-left h2 { font-size: 26px; }
+    .header-right {
+      text-align: left;
+      font-size: 12px;
+    }
+    .section {
+      margin-left: 12px;
+      padding: 12px 10px;
+    }
+    .section::before { left: -26px; }
+    th, td {
+      padding: 6px 5px;
+      font-size: 10px;
+    }
   }
 
   /* ── 打印优化 ── */
@@ -359,7 +362,6 @@
     .report-container { box-shadow: none; max-width: 100%; }
     .section { page-break-inside: avoid; box-shadow: none; border: 1px solid #ddd; }
     .header { box-shadow: none; }
-    .footer { box-shadow: none; }
     .chart-container { box-shadow: none; border: 1px solid #ddd; }
   }
 </style>
@@ -371,7 +373,7 @@
   <div class="header">
     <div class="header-left">
       <div style="display: flex; align-items: center; gap: 12px;">
-        <div style="width: 40px; height: 40px; background: rgba(255,255,255,0.2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px;">🛡</div>
+        <div style="width: 40px; height: 40px; background: rgba(255,255,255,0.2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700;">CJ</div>
         <div>
           <h1>创金合信基金交易部</h1>
           <h2>交易日报</h2>
@@ -379,43 +381,71 @@
       </div>
     </div>
     <div class="header-right">
-      <div class="date">{{ display_date }}（{{ weekday }}）</div>
-      <div>生成时间：{{ generated_at }}</div>
+      <div class="date">{{ template_date | default(display_date) }}（{{ weekday }}）</div>
     </div>
   </div>
 
   {% if not is_trading_day %}
-  <div class="non-trading-day">⚠ 注意：{{ display_date }} 可能为非交易日，以下数据仅供参考。</div>
+  <div class="non-trading-day">今日休市，无交易数据</div>
   {% endif %}
 
-  <!-- ═══════════════ 板块 1：交易额度总览 ═══════════════ -->
+  <!-- ═══════════════ 01 交易数据汇总 ═══════════════ -->
   <div class="section">
-    <div class="section-title"><span class="icon">01</span> 交易额度总览</div>
+    <div class="section-title"><span class="icon">01</span> 交易数据汇总</div>
+    <div class="template-subtitle">交易数据汇总</div>
 
-    <div class="summary-cards">
-      <div class="summary-card">
-        <div class="label">总笔数</div>
-        <div class="value">{{ trade_overview.总笔数 }}</div>
-      </div>
-      <div class="summary-card">
-        <div class="label">总指令金额（万元）</div>
-        <div class="value small">{{ "%.2f"|format(trade_overview.总指令金额 / 10000) }}</div>
-      </div>
-      <div class="summary-card">
-        <div class="label">总成交金额（万元）</div>
-        <div class="value small">{{ "%.2f"|format(trade_overview.总成交金额 / 10000) }}</div>
-      </div>
+    <table class="metric-table">
+      <thead>
+        <tr>
+          <th>交易笔数</th>
+          <th>指令金额（万元）</th>
+          <th>成交金额（万元）</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>{{ trade_overview.总笔数 }}</strong></td>
+          <td><strong>{{ "%.2f"|format(trade_overview.总指令金额 / 10000) }}</strong></td>
+          <td><strong>{{ "%.2f"|format(trade_overview.总成交金额 / 10000) }}</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    {% if not trade_overview.分类明细 %}
+    <div class="empty-data">暂无成交</div>
+    {% endif %}
+
+    <!-- ══════════════ 交易笔数 ═══════════════ -->
+    <div class="template-subtitle">交易笔数</div>
+
+    {% if trade_count_hourly and charts.trade_count %}
+    <div class="chart-container">
+      <img src="data:image/png;base64,{{ charts.trade_count }}" alt="交易笔数图">
     </div>
-
-    {% if trade_overview.分类明细 %}
+    {% elif trade_count_hourly %}
+    <table>
+      <thead>
+        <tr>
+          <th>时间</th>
+          <th>笔数</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for hour, count in trade_count_hourly.items() %}
+        <tr>
+          <td>{{ hour }}</td>
+          <td>{{ count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% elif trade_overview.分类明细 %}
     <table>
       <thead>
         <tr>
           <th>业务分类 · 委托方向</th>
           <th>笔数</th>
-          <th>指令金额（万元）</th>
-          <th>成交金额（万元）</th>
-          <th>成交率</th>
+          <th>笔数占比</th>
         </tr>
       </thead>
       <tbody>
@@ -423,8 +453,54 @@
         <tr>
           <td class="text-left">{{ key }}</td>
           <td>{{ val.笔数 }}</td>
+          <td>
+            {% if trade_overview.总笔数 > 0 %}
+              {{ "%.1f%%"|format(val.笔数 / trade_overview.总笔数 * 100) }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-data">暂无成交</div>
+    {% endif %}
+
+    <!-- ═══════════════ 交易金额 ═══════════════ -->
+    <div class="template-subtitle">交易金额</div>
+
+    {% if trade_prices and charts.trade_price %}
+    <div class="chart-container">
+      <img src="data:image/png;base64,{{ charts.trade_price }}" alt="交易金额图">
+    </div>
+    {% endif %}
+
+    {% if trade_overview.分类明细 %}
+    <table class="amount-table">
+      <thead>
+        <tr>
+          <th>业务分类 · 委托方向</th>
+          <th class="amount-col">指令金额（万元）</th>
+          <th class="amount-col">成交金额（万元）</th>
+          <th>金额占比</th>
+          <th>成交率</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for key, val in trade_overview.分类明细.items() %}
+        <tr>
+          <td class="text-left">{{ key }}</td>
           <td class="text-right">{{ "%.2f"|format(val.指令金额 / 10000) }}</td>
           <td class="text-right">{{ "%.2f"|format(val.成交金额 / 10000) }}</td>
+          <td>
+            {% if trade_overview.总指令金额 > 0 %}
+              {{ "%.1f%%"|format(val.指令金额 / trade_overview.总指令金额 * 100) }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
           <td>
             {% if val.指令金额 > 0 %}
               {{ "%.1f%%"|format(val.成交金额 / val.指令金额 * 100) }}
@@ -437,81 +513,14 @@
       </tbody>
     </table>
 
-    {% if charts.trade_overview %}
-    <div class="chart-container">
-      <img src="data:image/png;base64,{{ charts.trade_overview }}" alt="交易额度分布图">
-    </div>
-    {% endif %}
-
     {% else %}
-    <div class="empty-data">
-      当日无交易指令数据<br>
-      <small style="color: #999; font-size: 11px;">（测试环境历史日期 O32 数据通常为 0，当日数据才会完整）</small>
-    </div>
+    <div class="empty-data">暂无成交</div>
     {% endif %}
   </div>
 
-  <!-- ══════════════ 板块 2：交易笔数 ═══════════════ -->
+  <!-- ══════════════ 02 交收数据汇总 ═══════════════ -->
   <div class="section">
-    <div class="section-title"><span class="icon">02</span> 交易笔数分布</div>
-
-    {% if trade_count_hourly %}
-    <div class="chart-container">
-      <img src="data:image/png;base64,{{ charts.trade_count }}" alt="交易笔数分布图">
-    </div>
-    {% else %}
-    <div class="empty-data">
-      当日无交易笔数数据<br>
-      <small style="color: #999; font-size: 11px;">（测试环境历史日期 O32 数据通常为 0，当日数据才会完整）</small>
-    </div>
-    {% endif %}
-  </div>
-
-  <!-- ═══════════════ 板块 3：交易价格汇总 ═══════════════ -->
-  <div class="section">
-    <div class="section-title"><span class="icon">03</span> 交易价格汇总</div>
-
-    {% if trade_prices %}
-    <table>
-      <thead>
-        <tr>
-          <th>品种</th>
-          <th>平均利率（%）</th>
-          <th>最高利率（%）</th>
-          <th>最低利率（%）</th>
-          <th>笔数</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for label, val in trade_prices.items() %}
-        <tr>
-          <td><strong>{{ label }}</strong></td>
-          <td class="highlight-blue">{{ val.平均利率 }}</td>
-          <td class="highlight-red">{{ val.最高利率 }}</td>
-          <td class="highlight-green">{{ val.最低利率 }}</td>
-          <td>{{ val.笔数 }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-
-    {% if charts.trade_price %}
-    <div class="chart-container">
-      <img src="data:image/png;base64,{{ charts.trade_price }}" alt="交易价格走势图">
-    </div>
-    {% endif %}
-
-    {% else %}
-    <div class="empty-data">
-      当日无回购交易价格数据<br>
-      <small style="color: #999; font-size: 11px;">（测试环境历史日期 O32 数据通常为 0，当日数据才会完整）</small>
-    </div>
-    {% endif %}
-  </div>
-
-  <!-- ══════════════ 板块 4：交收预测汇总 ═══════════════ -->
-  <div class="section">
-    <div class="section-title"><span class="icon">04</span> 交收预测汇总</div>
+    <div class="section-title"><span class="icon">02</span> 交收数据汇总</div>
 
     {% if settlement_forecast.状态明细 %}
     <div class="summary-cards">
@@ -552,23 +561,14 @@
       </tbody>
     </table>
 
-    {% if charts.settlement %}
-    <div class="chart-container">
-      <img src="data:image/png;base64,{{ charts.settlement }}" alt="交收进度分布图">
-    </div>
-    {% endif %}
-
     {% else %}
-    <div class="empty-data">
-      当日无交收数据<br>
-      <small style="color: #999; font-size: 11px;">（测试环境历史日期 O32 数据通常为 0，当日数据才会完整）</small>
-    </div>
+    <div class="empty-data">暂无相关数据</div>
     {% endif %}
   </div>
 
-  <!-- ═══════════════ 板块 5：市场预测汇总 ═══════════════ -->
+  <!-- ═══════════════ 03 市场预测汇总 ═══════════════ -->
   <div class="section">
-    <div class="section-title"><span class="icon">05</span> 市场预测汇总</div>
+    <div class="section-title"><span class="icon">03</span> 市场预测汇总</div>
 
     {% if repo_rates %}
     {% if charts.repo_rate %}
@@ -601,94 +601,10 @@
     </table>
 
     {% else %}
-    <div class="empty-data">暂无银行间回购实时行情数据</div>
+    <div class="empty-data">暂无相关数据</div>
     {% endif %}
-  </div>
 
-  <!-- ═══════════════ 板块 5b：市场短评（QT 聊天） ═══════════════ -->
-  {% if qt_commentary.total %}
-  <div class="section">
-    <div class="section-title"><span class="icon">QT</span> 市场短评（资金面 / 现券 / 一级发行）</div>
-
-    <div class="qt-channel-stats">
-      <span>总消息：{{ qt_commentary.total }}</span>
-      {% for ch_name, ch_count in qt_commentary.channels.items() %}
-      <span>{{ ch_name }}：{{ ch_count }}</span>
-      {% endfor %}
-    </div>
-
-    <div class="qt-tabs">
-      <div class="qt-tab active" data-tab="funding">资金面（{{ qt_commentary['资金面'].count }}）</div>
-      <div class="qt-tab" data-tab="bond">现券（{{ qt_commentary['现券'].count }}）</div>
-      <div class="qt-tab" data-tab="primary">一级发行（{{ qt_commentary['一级发行'].count }}）</div>
-    </div>
-
-    <!-- 资金面 -->
-    <div class="qt-panel active" data-panel="funding">
-      <div class="qt-panel-count">共 {{ qt_commentary['资金面'].count }} 条，展示前 {{ qt_commentary['资金面'].messages | length }} 条</div>
-      <div class="qt-msg-list">
-        {% for msg in qt_commentary['资金面'].messages %}
-        <div class="qt-msg">
-          <div class="qt-msg-head">
-            <span class="qt-msg-sender">{{ msg.sender }}</span>
-            <span class="qt-msg-time">{{ msg.time }}</span>
-          </div>
-          <div class="qt-msg-content">{{ msg.content }}</div>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-
-    <!-- 现券 -->
-    <div class="qt-panel" data-panel="bond">
-      <div class="qt-panel-count">共 {{ qt_commentary['现券'].count }} 条，展示前 {{ qt_commentary['现券'].messages | length }} 条</div>
-      <div class="qt-msg-list">
-        {% for msg in qt_commentary['现券'].messages %}
-        <div class="qt-msg">
-          <div class="qt-msg-head">
-            <span class="qt-msg-sender">{{ msg.sender }}</span>
-            <span class="qt-msg-time">{{ msg.time }}</span>
-          </div>
-          <div class="qt-msg-content">{{ msg.content }}</div>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-
-    <!-- 一级发行 -->
-    <div class="qt-panel" data-panel="primary">
-      <div class="qt-panel-count">共 {{ qt_commentary['一级发行'].count }} 条，展示前 {{ qt_commentary['一级发行'].messages | length }} 条</div>
-      <div class="qt-msg-list">
-        {% for msg in qt_commentary['一级发行'].messages %}
-        <div class="qt-msg">
-          <div class="qt-msg-head">
-            <span class="qt-msg-sender">{{ msg.sender }}</span>
-            <span class="qt-msg-time">{{ msg.time }}</span>
-          </div>
-          <div class="qt-msg-content">{{ msg.content }}</div>
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-  </div>
-
-  <script>
-    // QT 短评 Tab 切换
-    document.querySelectorAll('.qt-tab').forEach(function(tab) {
-      tab.addEventListener('click', function() {
-        var target = this.getAttribute('data-tab');
-        document.querySelectorAll('.qt-tab').forEach(function(t) { t.classList.remove('active'); });
-        document.querySelectorAll('.qt-panel').forEach(function(p) { p.classList.remove('active'); });
-        this.classList.add('active');
-        document.querySelector('.qt-panel[data-panel="' + target + '"]').classList.add('active');
-      });
-    });
-  </script>
-  {% endif %}
-
-  <!-- ═══════════════ 板块 6：趋势预测及偏离度 ═══════════════ -->
-  <div class="section">
-    <div class="section-title"><span class="icon">06</span> 趋势预测及偏离度</div>
+    <div class="template-subtitle">趋势预测准确率</div>
 
     {% if trend_forecast.available %}
     <p style="font-size: 12px; color: #666; margin-bottom: 12px; padding: 8px 12px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #2d5f8a;">{{ trend_forecast.reason }}</p>
@@ -715,16 +631,10 @@
       </tbody>
     </table>
     {% else %}
-    <div class="empty-data">
-      ⏳ 该板块需积累历史时序数据后方可启用<br>
-      <small>{{ trend_forecast.reason }}</small>
-    </div>
+    <div class="empty-data">{{ trend_forecast.reason }}</div>
     {% endif %}
-  </div>
 
-  <!-- ══════════════ 板块 7：区间预测及偏离度 ═══════════════ -->
-  <div class="section">
-    <div class="section-title"><span class="icon">07</span> 区间预测及偏离度</div>
+    <div class="template-subtitle">区间预测准确率</div>
 
     {% if interval_forecast.available %}
     <p style="font-size: 12px; color: #666; margin-bottom: 12px; padding: 8px 12px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #2d5f8a;">{{ interval_forecast.reason }}</p>
@@ -749,22 +659,17 @@
       </tbody>
     </table>
     {% else %}
-    <div class="empty-data">
-      ⏳ 该板块需积累历史时序数据后方可启用<br>
-      <small>{{ interval_forecast.reason }}</small>
-    </div>
+    <div class="empty-data">{{ interval_forecast.reason }}</div>
     {% endif %}
   </div>
 
-  <!-- ═══════════════ 板块 8：货币市场情况 ═══════════════ -->
+  <!-- ═══════════════ 04 资金市场分析 ═══════════════ -->
   <div class="section">
-    <div class="section-title"><span class="icon">08</span> 货币市场情况</div>
+    <div class="section-title"><span class="icon">04</span> 资金市场分析</div>
+
+    <div class="inline-heading">公开市场操作{% if money_market.has_data %}（{{ money_market.data_date }}）{% endif %}</div>
 
     {% if money_market.has_data %}
-
-    <!-- 央行公开市场操作 -->
-    <h3 style="font-size: 15px; color: #1a3a5c; margin: 14px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #e8ecf0;">央行公开市场操作（{{ money_market.data_date }}）</h3>
-
     <div class="summary-cards">
       <div class="summary-card">
         <div class="label">OMO 净投放（亿元）</div>
@@ -802,12 +707,15 @@
       </tbody>
     </table>
     {% else %}
-    <div class="empty-data">当日无公开市场操作明细</div>
+    <div class="empty-data">暂无相关数据</div>
+    {% endif %}
+    {% else %}
+    <div class="empty-data">暂无相关数据</div>
     {% endif %}
 
-    <!-- 债券发行与到期 -->
-    <h3 style="font-size: 14px; color: #1a3a5c; margin: 20px 0 8px;">债券发行与到期</h3>
+    <div class="inline-heading">债券发行与到期</div>
 
+    {% if money_market.has_data %}
     {% if money_market.bond_maturities %}
     <table>
       <thead>
@@ -833,162 +741,81 @@
       </tbody>
     </table>
     {% else %}
-    <div class="empty-data">当日无债券到期数据</div>
+    <div class="empty-data">暂无相关数据</div>
     {% endif %}
-
     {% else %}
-    <div class="empty-data">暂无货币市场数据</div>
+    <div class="empty-data">暂无相关数据</div>
     {% endif %}
+
+    <div class="inline-heading">资金面状况</div>
+    <div class="analysis-box">{{ market_commentary.funding }}</div>
   </div>
 
-  <!-- ═══════════════ 板块 9：账户头寸情况 ═══════════════ -->
+  <!-- ═══════════════ 现券市场分析 ═══════════════ -->
   <div class="section">
-    <div class="section-title"><span class="icon">09</span> 账户头寸情况</div>
+    <div class="section-title">现券市场分析</div>
 
-    {% if positions %}
-    <table>
-      <thead>
-        <tr>
-          <th>产品代码</th>
-          <th>产品名称</th>
-          <th>头寸类型</th>
-          <th>T+1 可用（万元）</th>
-          <th>总头寸（万元）</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for pos in positions[:30] %}
-        {% set usable = pos.get('totalPositionT1Usable', 0) or 0 %}
-        {% set total = pos.get('totalPositionAzylIs', 0) or 0 %}
-        <tr>
-          <td>{{ pos.get('fundCode', '—') }}</td>
-          <td class="text-left">{{ pos.get('fundName', '—') }}</td>
-          <td>{{ pos.get('positionType', '—') }}</td>
-          <td class="text-right {% if usable < 0 %}highlight-red{% endif %}">
-            {{ "%.2f"|format(usable / 10000) }}
-          </td>
-          <td class="text-right">{{ "%.2f"|format(total / 10000) }}</td>
-        </tr>
-        {% endfor %}
-        {% if positions | length > 30 %}
-        <tr><td colspan="5" class="text-left" style="color:#999;">… 共 {{ positions | length }} 条记录，仅展示前 30 条</td></tr>
-        {% endif %}
-      </tbody>
-    </table>
+    <div class="analysis-box">{{ market_commentary.bond }}</div>
+  </div>
 
+  <!-- ═══════════════ 权益市场分析 ═══════════════ -->
+  <div class="section">
+    <div class="section-title">权益市场分析</div>
+    {% if equity_market.available %}
+    <div class="analysis-box">{{ equity_market.commentary }}</div>
+    <p class="muted-note">数据来源：外部市场短评</p>
     {% else %}
-    <div class="empty-data">暂无头寸数据</div>
+    <div class="empty-data">外部短评暂未获取</div>
     {% endif %}
   </div>
 
-  <!-- ═══════════════ 板块 9b：市场综合分析 ═══════════════ -->
+  <!-- ══════════════ 一级市场分析 ═══════════════ -->
   <div class="section">
-    <div class="section-title"><span class="icon">09</span> 市场综合分析</div>
-
-    <div style="padding: 24px; background: linear-gradient(135deg, #f8f9fa 0%, #fff 100%); border-radius: 8px; line-height: 2; border-left: 4px solid #2d5f8a; box-shadow: 0 2px 6px rgba(0,0,0,0.05);">
-      <h4 style="color: #1a3a5c; margin: 0 0 16px; font-size: 16px; font-weight: 700; border-bottom: 2px solid #2d5f8a; padding-bottom: 8px;">一、资金面</h4>
-      <div style="color: #333; font-size: 13px; white-space: pre-wrap; margin-bottom: 28px; background: #fff; padding: 14px 16px; border-radius: 6px; border: 1px solid #e8ecf0;">{{ market_commentary.funding }}</div>
-
-      <h4 style="color: #1a3a5c; margin: 0 0 16px; font-size: 16px; font-weight: 700; border-bottom: 2px solid #2d5f8a; padding-bottom: 8px;">二、现券</h4>
-      <div style="color: #333; font-size: 13px; white-space: pre-wrap; margin-bottom: 28px; background: #fff; padding: 14px 16px; border-radius: 6px; border: 1px solid #e8ecf0;">{{ market_commentary.bond }}</div>
-
-      <h4 style="color: #1a3a5c; margin: 0 0 16px; font-size: 16px; font-weight: 700; border-bottom: 2px solid #2d5f8a; padding-bottom: 8px;">三、一级发行</h4>
-      <div style="color: #333; font-size: 13px; white-space: pre-wrap; background: #fff; padding: 14px 16px; border-radius: 6px; border: 1px solid #e8ecf0;">{{ market_commentary.primary }}</div>
-    </div>
-  </div>
-
-  <!-- ═══════════════ 板块 10：风险预警分析 ═══════════════ -->
-  <div class="section">
-    <div class="section-title"><span class="icon">10</span> 风险预警分析</div>
-
-    {% if risk_warnings %}
-    <table>
-      <thead>
-        <tr>
-          <th>风险类型</th>
-          <th>涉及产品</th>
-          <th>详情</th>
-          <th>风险等级</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for w in risk_warnings %}
-        <tr>
-          <td>{{ w.风险类型 }}</td>
-          <td class="text-left">{{ w.产品 }}</td>
-          <td class="text-left">{{ w.详情 }}</td>
-          <td>
-            {% if w.等级 == '高' %}
-              <span class="risk-tag risk-high">{{ w.等级 }}</span>
-            {% elif w.等级 == '中' %}
-              <span class="risk-tag risk-medium">{{ w.等级 }}</span>
-            {% else %}
-              <span class="risk-tag risk-low">{{ w.等级 }}</span>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-
-    {% else %}
-    <div class="empty-data" style="color: #27ae60; border: 1px solid #27ae60;">
-      <span style="font-size: 18px; font-weight: 600;">✅ 当日未触发风险预警规则</span>
-    </div>
-    {% endif %}
-  </div>
-
-  <!-- ══════════════ 板块 11：一级市场情况 ═══════════════ -->
-  <div class="section">
-    <div class="section-title"><span class="icon">11</span> 一级市场情况</div>
+    <div class="section-title">一级市场分析</div>
 
     {% if primary_market.available %}
-    <!-- 待接入外部数据源 -->
+    <div class="inline-heading">发行情况</div>
+    <div class="analysis-box">{{ primary_market.summary | default("暂无相关数据") }}</div>
+    <div class="inline-heading">发行结构分析</div>
+    {% if primary_market.structure_summary %}
+    <div class="analysis-box">{{ primary_market.structure_summary }}</div>
+    {% else %}
+    <div class="empty-data">暂无相关数据</div>
+    {% endif %}
     {% elif qt_commentary.get('一级发行', {}).get('count', 0) > 0 %}
-    <p style="font-size: 12px; color: #666; margin-bottom: 12px;">
+    <div class="inline-heading">发行情况</div>
+    <div class="analysis-box">{{ market_commentary.primary }}</div>
+    <p class="muted-note">
       今日一级市场共 {{ qt_commentary['一级发行'].count }} 条相关短评，以下为代表性信息：
     </p>
-    <div style="padding: 12px; background: #f8f9fa; border-radius: 6px; max-height: 400px; overflow-y: auto;">
+    <div class="commentary-list">
       {% for msg in qt_commentary['一级发行'].messages[:10] %}
-      <div style="padding: 8px 0; border-bottom: 1px solid #e8ecf0; font-size: 12px;">
-        <span style="color: #2d5f8a; font-weight: 600;">{{ msg.sender }}</span>
-        <span style="color: #999; margin-left: 8px; font-size: 11px;">{{ msg.time }}</span>
-        <div style="margin-top: 4px; color: #333; line-height: 1.5;">{{ msg.content }}</div>
+      <div class="commentary-item">
+        <span class="commentary-meta">{{ msg.sender }}</span>
+        <span class="muted-note">{{ msg.time }}</span>
+        <div>{{ msg.content }}</div>
       </div>
       {% endfor %}
     </div>
-    <p style="font-size: 11px; color: #999; margin-top: 8px;">
-      注：完整一级市场数据需接入 ChinaBond/Wind 等外部数据源
-    </p>
+    <div class="inline-heading">发行结构分析</div>
+    <div class="empty-data">暂无相关数据</div>
     {% else %}
-    <div class="empty-data">
-      暂无一级市场数据<br>
-      <small style="color: #999; font-size: 11px;">（需接入 ChinaBond/Wind 或当日无相关 QT 短评）</small>
-    </div>
+    <div class="inline-heading">发行情况</div>
+    <div class="empty-data">暂无相关数据</div>
+    <div class="inline-heading">发行结构分析</div>
+    <div class="empty-data">暂无相关数据</div>
     {% endif %}
   </div>
 
-  <!-- ═══════════════ 板块 12：风险提示 ═══════════════ -->
+  <!-- ═══════════════ 风险提示 ═══════════════ -->
   <div class="section">
-    <div class="section-title"><span class="icon">12</span> 风险提示</div>
+    <div class="section-title">风险提示</div>
 
-    {% if risk_tips %}
-    <div style="padding: 16px 20px; background: linear-gradient(135deg, #f8f9fa 0%, #fff 100%); border-left: 4px solid #2d5f8a; border-radius: 6px; line-height: 1.8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-      {{ risk_tips | safe }}
-    </div>
-    {% else %}
-    <div style="padding: 16px 20px; background: linear-gradient(135deg, #f8f9fa 0%, #fff 100%); border-left: 4px solid #2d5f8a; border-radius: 6px; line-height: 1.8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-      <p style="margin-bottom: 10px;"><strong>1.</strong> 请密切关注明日到期回购资金的安排，提前做好头寸准备。</p>
-      <p style="margin-bottom: 10px;"><strong>2.</strong> 关注央行公开市场操作动向，合理安排资金交易节奏。</p>
-      <p><strong>3.</strong> 注意交易对手集中度风险，分散交易对手以降低信用风险。</p>
-    </div>
-    {% endif %}
-  </div>
-
-  <!-- ══════════════ 尾部 ═══════════════ -->
-  <div class="footer">
-    创金合信基金交易部 · 交易日报 · 自动生成 · {{ generated_at }}<br>
-    <small>数据来源：AI Gateway 测试环境 | 如有疑问请联系 IT 支持</small>
+    <ol class="risk-list">
+      {% for tip in risk_tips %}
+      <li><span class="risk-index">{{ loop.index }}.</span><span>{{ tip }}</span></li>
+      {% endfor %}
+    </ol>
   </div>
 
 </div>
