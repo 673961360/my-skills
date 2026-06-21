@@ -246,6 +246,26 @@ def render_money_market_detail_missing_report() -> str:
     return render_report(data, charts={})
 
 
+def render_money_market_sample_report() -> str:
+    data = build_sample_data()
+    data["money_market"] = {
+        "has_data": True,
+        "data_date": "2026-06-17",
+        "omo_net_inject": 120.0,
+        "gov_bond_payment": -35.0,
+        "omo_operations": [
+            {"操作": "7天逆回购", "期限": "7D", "方向": "投放", "金额(亿)": 500.0},
+            {"操作": "逆回购到期", "期限": "7D", "方向": "回笼", "金额(亿)": 380.0},
+        ],
+        "bond_maturities": [
+            {"品种": "国债", "到期(亿)": 80.0, "发行(亿)": 120.0},
+            {"品种": "地方债", "到期(亿)": 160.0, "发行(亿)": 90.0},
+        ],
+    }
+    data["market_commentary"]["funding"] = "资金面样例短评：隔夜供给平稳，跨月资金价格保持关注。"
+    return render_report(data, charts={})
+
+
 class TemplateContractTest(unittest.TestCase):
     def test_visible_titles_follow_template_contract_order(self):
         html = render_sample_report()
@@ -528,6 +548,24 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("债券发行与到期", segment)
         self.assertIn("资金面状况", segment)
         self.assertIn("暂无相关数据", segment)
+
+    def test_funding_market_section_renders_data_inside_single_unit(self):
+        html = render_money_market_sample_report()
+
+        funding_pos = html.index('<span class="icon">04</span> 资金市场分析')
+        section_pos = html.rfind('<div class="section">', 0, funding_pos)
+        bond_pos = html.index("现券市场分析")
+        segment = html[section_pos:bond_pos]
+
+        self.assertIn("公开市场操作（2026-06-17）", segment)
+        self.assertIn("OMO 净投放（亿元）", segment)
+        self.assertIn("政府债净缴款（亿元）", segment)
+        self.assertIn("<td>7D</td>", segment)
+        self.assertIn("债券发行与到期", segment)
+        self.assertIn("<strong>国债</strong>", segment)
+        self.assertIn("资金面状况", segment)
+        self.assertIn("资金面样例短评", segment)
+        self.assertEqual(1, segment.count('<div class="section">'))
 
 
 if __name__ == "__main__":
