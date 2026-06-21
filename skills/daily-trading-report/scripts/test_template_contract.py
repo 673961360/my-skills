@@ -532,6 +532,31 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("发行结构分析结构化摘要样例。", html)
         self.assertNotIn("待接入", html)
 
+    def test_primary_market_section_renders_all_branches_inside_single_unit(self):
+        fallback_html = render_sample_report()
+        qt_html = render_primary_market_sample_report()
+        available_html = render_primary_market_available_report()
+
+        def primary_segment(html: str) -> str:
+            title = html.index('<div class="section-title">一级市场分析</div>')
+            start = html.rfind('<div class="section">', 0, title)
+            next_title = html.index('<div class="section-title">风险提示</div>')
+            end = html.rfind('<div class="section">', 0, next_title)
+            return html[start:end]
+
+        fallback_segment = primary_segment(fallback_html)
+        qt_segment = primary_segment(qt_html)
+        available_segment = primary_segment(available_html)
+
+        self.assertIn("发行情况", fallback_segment)
+        self.assertIn("发行结构分析", fallback_segment)
+        self.assertIn("暂无相关数据", fallback_segment)
+        self.assertIn("一级发行样例消息一", qt_segment)
+        self.assertIn("发行结构分析", qt_segment)
+        self.assertIn("一级市场发行情况结构化摘要样例。", available_segment)
+        self.assertIn("发行结构分析结构化摘要样例。", available_segment)
+        self.assertEqual(1, available_segment.count('<div class="section">'))
+
     def test_equity_market_uses_external_input_or_contract_fallback(self):
         fallback = build_equity_market_analysis()
         provided = build_equity_market_analysis("A股市场收盘后外部短评样例。")
