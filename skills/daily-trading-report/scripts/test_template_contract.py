@@ -227,6 +227,12 @@ def render_equity_market_sample_report() -> str:
     return render_report(data, charts={})
 
 
+def render_bond_market_sample_report() -> str:
+    data = build_sample_data()
+    data["market_commentary"]["bond"] = "现券样例短评：长端收益率小幅下行，成交集中在活跃券。"
+    return render_report(data, charts={})
+
+
 def render_non_trading_sample_report() -> str:
     data = build_sample_data()
     data["is_trading_day"] = False
@@ -566,6 +572,25 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("资金面状况", segment)
         self.assertIn("资金面样例短评", segment)
         self.assertEqual(1, segment.count('<div class="section">'))
+
+    def test_bond_market_section_renders_commentary_or_fallback(self):
+        fallback_html = render_sample_report()
+        provided_html = render_bond_market_sample_report()
+
+        fallback_pos = fallback_html.index('<div class="section-title">现券市场分析</div>')
+        fallback_next = fallback_html.index('<div class="section-title">权益市场分析</div>')
+        fallback_segment = fallback_html[fallback_pos:fallback_next]
+
+        provided_pos = provided_html.index('<div class="section-title">现券市场分析</div>')
+        provided_start = provided_html.rfind('<div class="section">', 0, provided_pos)
+        provided_next_title = provided_html.index('<div class="section-title">权益市场分析</div>')
+        provided_next = provided_html.rfind('<div class="section">', 0, provided_next_title)
+        provided_segment = provided_html[provided_start:provided_next]
+
+        self.assertIn("暂无有效消息", fallback_segment)
+        self.assertIn("现券样例短评", provided_segment)
+        self.assertIn('<div class="analysis-box">', provided_segment)
+        self.assertEqual(1, provided_segment.count('<div class="section">'))
 
 
 if __name__ == "__main__":
