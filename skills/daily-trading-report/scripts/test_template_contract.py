@@ -272,6 +272,17 @@ def render_money_market_sample_report() -> str:
     return render_report(data, charts={})
 
 
+def render_risk_tips_sample_report() -> str:
+    data = build_sample_data()
+    warnings = [
+        {"风险类型": "集中度", "产品": "产品A", "详情": "交易对手集中度偏高", "等级": "高"},
+        {"风险类型": "流动性", "产品": "产品B", "详情": "明日到期资金较集中", "等级": "中"},
+    ]
+    data["risk_warnings"] = warnings
+    data["risk_tips"] = build_risk_tips(warnings)
+    return render_report(data, charts={})
+
+
 class TemplateContractTest(unittest.TestCase):
     def test_visible_titles_follow_template_contract_order(self):
         html = render_sample_report()
@@ -556,6 +567,20 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("一级市场发行情况结构化摘要样例。", available_segment)
         self.assertIn("发行结构分析结构化摘要样例。", available_segment)
         self.assertEqual(1, available_segment.count('<div class="section">'))
+
+    def test_risk_tips_section_renders_numbered_list_as_final_unit(self):
+        html = render_risk_tips_sample_report()
+
+        risk_title = html.index('<div class="section-title">风险提示</div>')
+        risk_start = html.rfind('<div class="section">', 0, risk_title)
+        risk_segment = html[risk_start:]
+
+        self.assertIn('<ol class="risk-list">', risk_segment)
+        self.assertIn('<span class="risk-index">1.</span>', risk_segment)
+        self.assertIn("今日规则引擎识别到 2 条风险线索", risk_segment)
+        self.assertIn("请密切关注明日到期回购资金的安排", risk_segment)
+        self.assertEqual(1, risk_segment.count('<div class="section">'))
+        self.assertNotIn("规则引擎风险", risk_segment)
 
     def test_equity_market_uses_external_input_or_contract_fallback(self):
         fallback = build_equity_market_analysis()
