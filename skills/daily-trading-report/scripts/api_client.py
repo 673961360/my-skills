@@ -48,9 +48,17 @@ def _cache_key(api_id: str, params: dict | None) -> str:
     return f"{api_id}_{h}.json"
 
 
+# 需要缓存的接口（白名单），只缓存数据量大/响应慢的接口
+_CACHE_WHITELIST = {
+    "cat_sql_trade_0019",  # O32 指令（~1.4MB，最慢）
+    "cat_sql_trade_0013",  # 资金事件日历
+    "cat_api_trade_0008",  # 应急回购
+}
+
+
 def _read_cache(api_id: str, params: dict | None) -> dict | None:
-    """读缓存，未命中返回 None。"""
-    if not _is_cache_enabled():
+    """读缓存，未命中返回 None。仅白名单内接口生效。"""
+    if not _is_cache_enabled() or api_id not in _CACHE_WHITELIST:
         return None
     path = _get_cache_dir() / _cache_key(api_id, params)
     if path.exists():
@@ -60,8 +68,8 @@ def _read_cache(api_id: str, params: dict | None) -> dict | None:
 
 
 def _write_cache(api_id: str, params: dict | None, data: dict) -> None:
-    """写缓存。"""
-    if not _is_cache_enabled():
+    """写缓存。仅白名单内接口生效。"""
+    if not _is_cache_enabled() or api_id not in _CACHE_WHITELIST:
         return
     path = _get_cache_dir() / _cache_key(api_id, params)
     with open(path, "w", encoding="utf-8") as f:
