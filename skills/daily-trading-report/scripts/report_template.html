@@ -753,13 +753,41 @@
     <div class="section-title">一级市场分析</div>
 
     {% if primary_market.available %}
-    <div class="inline-heading">发行情况</div>
-    <div class="analysis-box">{{ primary_market.summary | default("暂无相关数据") }}</div>
+    <div class="inline-heading">发行情况{% if primary_market.data_date %}（{{ primary_market.data_date }}）{% endif %}</div>
+    <div class="summary-cards">
+      {% if primary_market.totals.利率债 > 0 %}
+      <div class="summary-card">
+        <div class="label">利率债发行</div>
+        <div class="value small">{{ "%.0f"|format(primary_market.totals.利率债) }}<span class="unit">亿</span></div>
+      </div>
+      {% endif %}
+      {% if primary_market.totals.地方债 > 0 %}
+      <div class="summary-card">
+        <div class="label">地方债发行</div>
+        <div class="value small">{{ "%.0f"|format(primary_market.totals.地方债) }}<span class="unit">亿</span></div>
+      </div>
+      {% endif %}
+      {% if primary_market.totals.NCD > 0 %}
+      <div class="summary-card">
+        <div class="label">NCD 发行</div>
+        <div class="value small">{{ "%.0f"|format(primary_market.totals.NCD) }}<span class="unit">亿</span></div>
+      </div>
+      {% endif %}
+    </div>
+    <div class="analysis-box">{{ primary_market.summary | default("") }}</div>
     <div class="inline-heading">发行结构分析</div>
+    {% if primary_market.structure_detail %}
+    <table>
+      <thead><tr><th>品种</th><th>期限</th><th>金额（亿）</th></tr></thead>
+      <tbody>
+      {% for item in primary_market.structure_detail %}
+      <tr><td>{{ item.品种 }}</td><td>{{ item.期限 }}</td><td class="text-right">{{ "%.2f"|format(item['金额(亿)']) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
     {% if primary_market.structure_summary %}
     <div class="analysis-box">{{ primary_market.structure_summary }}</div>
-    {% else %}
-    <div class="empty-data">暂无相关数据</div>
     {% endif %}
     {% elif qt_commentary.get('一级发行', {}).get('count', 0) > 0 %}
     <div class="inline-heading">发行情况</div>

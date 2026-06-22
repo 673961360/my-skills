@@ -33,11 +33,12 @@ cd scripts && uv sync
 
 1. **确认日期**：默认当日，用户可指定。向用户确认日期和星期
 2. **运行脚本**：`uv run python generate_report.py --date YYYYMMDD`
-3. **检查结果**：
+3. **精炼短评**：脚本输出的 HTML 中资金/现券栏为原文 dump。Claude 读取原文，按 `prompts/funding-commentary.md` 和 `prompts/bond-commentary.md` 精炼为 3-5 句判断性总结；权益栏按 `prompts/stock-commentary.md` 通过 WebSearch 获取行情并生成总结；一级栏按 `prompts/primary-commentary.md` 尝试从资金日评「一级简评」提取，无则降级。精炼结果直接编辑 HTML 替换。
+4. **检查结果**：
    - 成功 → 读取 HTML，向用户展示摘要
    - 失败 → 根据错误信息排查（见下方错误表）
-4. **用户审核**：最多 3 轮调整
-5. **交付**：告知文件路径，询问是否创建飞书文档
+5. **用户审核**：最多 3 轮调整
+6. **交付**：告知文件路径，询问是否创建飞书文档
 
 ## 错误排查
 

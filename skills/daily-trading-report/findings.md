@@ -65,6 +65,35 @@
 
 ---
 
+## 一级市场分析 · 发行数据源（cat_sql_trade_0013，已接入）
+
+> 从资金事件日历中提取「发行与到期」事件的发行方向数据，填充一级市场分析板块。
+
+### 识别逻辑
+
+| 层级 | 条件 | 数据 |
+|------|------|------|
+| 汇总卡 | `EVNT_TYP_NM="发行与到期"` AND `DATA_TYP="汇总"` AND `DIM3_NM` 含 `"发行"` | 利率债发行 / 地方债发行 / NCD发行（每日最多各一条） |
+| 明细表 | `EVNT_TYP_NM="发行与到期"` AND `DATA_TYP="明细"` AND `DIM3_NM="发行"` | 国债/政金债/地方债/NCD × 期限 |
+| 排除 | `DIM3_NM` 含 `"到期"` / 不含 `"发行"` | 所有到期行被忽略，不会误识为发行 |
+| 汇总推算 | 汇总行缺失时从明细行汇总 | 按品种（国债+政金债→利率债）汇总 |
+
+### 字段映射（0013 → 一级市场板块）
+
+| 一级市场展示 | 0013 源字段 | 说明 |
+|------------|-----------|------|
+| 汇总卡·利率债发行 | `INDX_VAL`（汇总行 `DIM3_NM="利率债发行"`） | 亿元 |
+| 汇总卡·地方债发行 | `INDX_VAL`（汇总行 `DIM3_NM="地方债发行"`） | 亿元 |
+| 汇总卡·NCD发行 | `INDX_VAL`（汇总行 `DIM3_NM="NCD发行"`） | 亿元 |
+| 明细·品种 | `DIM1_NM` | 国债/政金债/地方债/NCD |
+| 明细·期限 | `DIM2_NM` | 3Y/10Y/1M 等 |
+| 明细·金额 | `INDX_VAL` | 亿元 |
+
+- 汇总卡金额 >0 才渲染（如当日无 NCD 发行则不显示 NCD 卡片）
+- 当日无任何发行数据时 `available=False`，降级「暂无相关数据」
+
+---
+
 ## QT 短评：数据源真实结构与字段映射
 
 > **关键修正**：QT 表（`ats.t_repo_robot_chatmessage`）本质是**交易报价/询价聊天流**，不是短评库。6.18 实测单日 13.19 万条中 99%+ 是报价单、成交回报、机器人公告、寒暄；真正的市场短评仅 25 条（去重 8 篇）。直接对全表做关键词分类会把报价当短评（见下方「现有逻辑缺陷」）。
@@ -119,7 +148,20 @@
 
 ### 采集与生成逻辑（已重构）
 
-已由 `db_client.fetch_daily_commentary()` + `data_collector.generate_market_commentary()` 实现：SQL 层 `日评/早评/午评` 召回 → 按 CONTENT 原文去重 → 按标题分主题 → 每主题选最长代表篇 → 整段引用（无损清洗去 URL/空行）+ 来源标注。一级无独立日评，固定降级「暂无相关数据」。原 `categorize_messages` 全表关键词匹配（误把报价当短评）已移除。
+**脚本层**（`db_client.fetch_daily_commentary()` + `data_collector.generate_market_commentary()`）：
+SQL `日评/早评/午评` 召回 → CONTENT 原文去重 → 标题分主题 → 选代表篇 → 原文输出（去 URL/空行清洗）。脚本产出的 `market_commentary` 为原文 dump，不做精炼。
+
+**精炼层**（Claude 执行）：
+脚本输出 HTML 后，Claude 读取资金/现券栏的原文 dump，按 `prompts/` 模板精炼为 3-5 句判断性总结；权益栏由 Claude 通过 WebSearch 获取 A 股行情后按 `prompts/stock-commentary.md` 生成总结。精炼结果直接编辑 HTML 替换。一级无独立日评，固定降级「暂无相关数据」。
+
+| 栏目 | Prompt 文件 | 输入来源 |
+|------|-----------|---------|
+| 资金市场分析 | `prompts/funding-commentary.md` | QT 资金日评原文 dump |
+| 现券市场分析 | `prompts/bond-commentary.md` | QT 现券日评原文 dump |
+| 一级市场分析 | `prompts/primary-commentary.md` | 资金日评「一级简评」小节（嵌入）或降级 |
+| 权益市场分析 | `prompts/stock-commentary.md` | WebSearch A 股收盘数据 |
+
+原 `categorize_messages` 全表关键词匹配（误把报价当短评）已移除。
 
 > 权益市场无 QT 日评，需 WebSearch（见下方外部数据源）。
 
@@ -135,6 +177,6 @@
 | 市场预测汇总 · 收益率曲线 | 中国货币网「债券收盘收益率曲线」 | `https://www.chinamoney.com.cn/chinese/bkcurvclosedy/`；国债、政策性金融债等曲线，每个工作日公布 | 抓取失败时现券预测仅使用 QT 现券情绪和资金面评分，并标注低置信度 |
 | 市场预测汇总 · 权益指数 | 东方财富行情中心 | `https://push2.eastmoney.com/api/qt/ulist.np/get`；当前使用上证指数、创业板指最新点位和涨跌幅 | 抓取失败时权益预测行显示 `暂无相关数据` |
 | 市场预测汇总 · 一级 CD | 待确定 | 需确定 1Y 大行 CD 发行利率和二级利差可用来源；当前仅从一级发行短评中尝试抽取 | 无短评或无可解析数值时显示 `暂无相关数据` |
-| 一级市场分析 | 无独立一级日评；一级存单评述嵌在资金存单日评【一级简评】小节；利率债一级见利率债日评 + eBOND 公告 | db_client.py | "暂无相关数据" |
+| 一级市场分析 | 资金事件日历 cat_sql_trade_0013 发行与到期·发行方向 | `aggregate_primary_market()` > `primary_market` | "暂无相关数据"（当日无发行时） |
 
 > 缺失数据占位文本的权威定义见 `template-contract.md`「数据填充规则」。

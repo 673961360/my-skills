@@ -85,7 +85,7 @@ def build_sample_data() -> dict:
             "bond": "暂无有效消息",
             "primary": "暂无有效消息",
         },
-        "primary_market": {"available": False, "reason": "暂无对应 API 数据源"},
+        "primary_market": {"available": False, "reason": "今日无一级市场发行数据"},
         "equity_market": build_equity_market_analysis(),
         "risk_tips": build_risk_tips([]),
         "qt_commentary": {
@@ -218,7 +218,14 @@ def render_primary_market_available_report() -> str:
     data = build_sample_data()
     data["primary_market"] = {
         "available": True,
+        "data_date": "2026-06-22",
         "summary": "一级市场发行情况结构化摘要样例。",
+        "totals": {"利率债": 260, "地方债": 235, "NCD": 0},
+        "structure_detail": [
+            {"品种": "国债", "期限": "10Y", "金额(亿)": 90.00},
+            {"品种": "政金债", "期限": "5Y", "金额(亿)": 70.00},
+            {"品种": "地方债", "期限": "30Y", "金额(亿)": 50.50},
+        ],
         "structure_summary": "发行结构分析结构化摘要样例。",
     }
     return render_report(data, charts={})
@@ -648,6 +655,15 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("发行结构分析", primary_html)
         self.assertIn("发行结构分析结构化摘要样例。", primary_html)
         self.assertNotIn("待接入", primary_html)
+        # 新结构：汇总卡片 + 明细表
+        self.assertIn("利率债发行", primary_html)
+        self.assertIn("260", primary_html)
+        self.assertIn("地方债发行", primary_html)
+        self.assertIn("235", primary_html)
+        self.assertNotIn("NCD 发行", primary_html)  # NCD=0 不渲染卡片
+        self.assertIn("<th>品种</th>", primary_html)
+        self.assertIn("<td>国债</td>", primary_html)
+        self.assertIn("<td>10Y</td>", primary_html)
 
     def test_primary_market_section_renders_all_branches_inside_single_unit(self):
         fallback_html = render_sample_report()
@@ -671,6 +687,7 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("一级发行样例消息一", qt_segment)
         self.assertIn("发行结构分析", qt_segment)
         self.assertIn("一级市场发行情况结构化摘要样例。", available_segment)
+        self.assertIn("利率债发行", available_segment)  # 汇总卡片
         self.assertIn("发行结构分析结构化摘要样例。", available_segment)
         self.assertEqual(1, available_segment.count('<div class="section">'))
 

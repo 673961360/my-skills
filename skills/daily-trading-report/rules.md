@@ -14,11 +14,15 @@
 | `scripts/report_template.html` | Jinja2 HTML 模板 |
 | `config.json` | API + Oracle 配置 |
 | `reference/API接口接入手册.md` | 完整接口文档 |
+| `prompts/funding-commentary.md` | 资金市场分析精炼 prompt |
+| `prompts/bond-commentary.md` | 现券市场分析精炼 prompt |
+| `prompts/primary-commentary.md` | 一级市场分析精炼 prompt |
+| `prompts/stock-commentary.md` | 权益市场分析生成 prompt |
 
 ## 数据计算原则
 
 - **数值统计必须代码确定性计算**（`aggregate_*`/SQL），不得大模型推理或编造——LLM 大数求和/百分比/多步运算会漂移，破坏可重复与可审计
-- **AI 仅做编排**（跑脚本/展示/WebSearch 取短评）与文字组织；文字来自数据源原文（QT/WebSearch），数值一律引用代码结果，不产出不改写
+- **AI 仅做编排**（跑脚本/展示/WebSearch 取短评）与文字精炼；文字精炼按 `prompts/*.md` 模板执行（围绕业务目标、好/差示例驱动），数值一律引用代码结果，不产出不改写
 
 ## API 数据源
 
@@ -38,7 +42,7 @@
 |--------|------|
 | `cat_sql_trade_0005` | 对手基本信息 |
 | `cat_api_trade_0022` | 头寸预测 |
-| `cat_sql_trade_0013` | 资金事件日历（OMO + 债券发行到期 + 政府债缴款） |
+| `cat_sql_trade_0013` | 资金事件日历（OMO + 债券发行到期 + 政府债缴款 + 一级市场发行） |
 | `cat_sql_trade_0002` | 产品信息 |
 
 **接口规范**：
@@ -49,7 +53,8 @@
 ### 资金事件日历（cat_sql_trade_0013）
 
 - 汇总行：`DATA_TYP=汇总`、`DIM1_NM=OMO净投放` → 净投放额
-- 明细行：`DIM3_NM` 为方向（投放/到期）
+- 明细行：`DIM3_NM` 为方向（投放/到期/发行）
+- **发行识别**：`EVNT_TYP_NM="发行与到期"` 且 `DIM3_NM` 含 `"发行"` → 一级市场发行数据；仅 `DIM3_NM="发行"` 不误判到期
 - **日期规则**：`STAT_DT` 是 UTC，+1 天 = 北京日期（查 6/18 → 筛 UTC 6/17）
 
 ## Oracle 数据源（QT 短评）

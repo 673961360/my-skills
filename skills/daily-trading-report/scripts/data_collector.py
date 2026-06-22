@@ -719,6 +719,126 @@ def aggregate_money_market(events: list[dict], query_date: str = "") -> dict:
     }
 
 
+def aggregate_primary_market(events: list[dict], query_date: str = "") -> dict:
+    """从资金事件日历中提取一级市场发行数据。
+
+    识别逻辑（不会被 DIM3 中的「到期」噪音干扰）：
+    - 汇总行：EVNT_TYP_NM="发行与到期" AND DATA_TYP="汇总" AND DIM3_NM 包含"发行"
+      → 利率债发行 / 地方债发行 / NCD发行（每日最多各一条）
+    - 明细行：EVNT_TYP_NM="发行与到期" AND DATA_TYP="明细" AND DIM3_NM="发行"
+      → 国债/政金债/地方债/NCD × 期限（到期行 DIM3="到期"，不会被误识）
+    - 汇总行缺失时，从明细行汇总推算 totals。
+    - 当日无任何发行数据时 available=False。
+
+    STAT_DT 日期映射同 aggregate_money_market（UTC+1天=北京时间）。
+    """
+    if not events:
+        return {"available": False, "reason": "暂无一级市场发行数据"}
+
+    # UTC 日期映射
+    target_utc_date = ""
+    if query_date:
+        dt = datetime.strptime(query_date, "%Y%m%d")
+        utc_dt = dt - timedelta(days=1)
+        target_utc_date = utc_dt.strftime("%Y-%m-%d")
+
+    # 按日期筛选
+    day_events: list[dict] = []
+    for e in events:
+        raw = e.get("STAT_DT", "")
+        if isinstance(raw, str) and raw[:10] == target_utc_date:
+            day_events.append(e)
+
+    # 目标日期无数据时取最新日期
+    data_date = target_utc_date
+    if not day_events and events:
+        dates = sorted(
+            {str(e.get("STAT_DT", ""))[:10] for e in events if e.get("STAT_DT")},
+            reverse=True,
+        )
+        if dates:
+            data_date = dates[0]
+            day_events = [e for e in events if str(e.get("STAT_DT", ""))[:10] == data_date]
+
+    # 北京时间显示
+    if data_date:
+        display_date = (datetime.strptime(data_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    else:
+        display_date = ""
+
+    # 提取发行数据
+    issuance_summary: dict[str, float] = {}   # 品种名→金额（汇总行）
+    issuance_detail: list[dict] = []          # [{品种, 期限, 金额(亿)}]
+
+    for e in day_events:
+        if e.get("EVNT_TYP_NM") != "发行与到期":
+            continue
+        dim3 = e.get("DIM3_NM", "")
+        if "发行" not in dim3:                # 到期/其他行全部跳过
+            continue
+        val = float(e.get("INDX_VAL", 0) or 0)
+        if e.get("DATA_TYP") == "汇总":
+            # 利率债发行 / 地方债发行 / NCD发行
+            issuance_summary[dim3] = val
+        elif dim3 == "发行":                   # 明细行，精确匹配"发行"二字
+            issuance_detail.append({
+                "品种": e.get("DIM1_NM", ""),
+                "期限": e.get("DIM2_NM", ""),
+                "金额(亿)": round(val, 2),
+            })
+
+    has_data = bool(issuance_summary) or bool(issuance_detail)
+    if not has_data:
+        return {"available": False, "reason": "今日无一级市场发行数据"}
+
+    # 汇总行缺失时从明细推算
+    def _get_total(category: str) -> float:
+        if category in issuance_summary:
+            return issuance_summary[category]
+        # 从明细汇总
+        cat_map = {"利率债发行": ("国债", "政金债"), "地方债发行": ("地方债",), "NCD发行": ("NCD",)}
+        names = cat_map.get(category, ())
+        return round(sum(d["金额(亿)"] for d in issuance_detail if d["品种"] in names), 2)
+
+    totals = {
+        "利率债": _get_total("利率债发行"),
+        "地方债": _get_total("地方债发行"),
+        "NCD": _get_total("NCD发行"),
+    }
+
+    # 生成文字摘要
+    parts = []
+    for label, cat in [("利率债", "利率债"), ("地方债", "地方债"), ("NCD", "NCD")]:
+        if totals[cat] > 0:
+            parts.append(f"{label} {totals[cat]:.0f}亿")
+    summary = "今日一级市场发行：" + "，".join(parts) if parts else "今日一级市场发行数据"
+
+    # 按品种分组
+    by_type: dict[str, dict] = {}
+    for d in issuance_detail:
+        t = d["品种"]
+        if t not in by_type:
+            by_type[t] = {"品种": t, "发行(亿)": 0.0, "明细": []}
+        by_type[t]["发行(亿)"] += d["金额(亿)"]
+        by_type[t]["明细"].append(d)
+
+    structure_parts = []
+    for t, info in sorted(by_type.items()):
+        d_str = ", ".join(f"{d['期限']} {d['金额(亿)']:.0f}亿" for d in info["明细"])
+        structure_parts.append(f"{t}（{d_str}），合计 {info['发行(亿)']:.0f}亿")
+    structure_summary = "；".join(structure_parts) + "。"
+
+    return {
+        "available": True,
+        "data_date": display_date,
+        "summary": summary,
+        "totals": totals,
+        "structure": sorted(by_type.values(), key=lambda x: x["发行(亿)"], reverse=True),
+        "structure_detail": issuance_detail,
+        "structure_summary": structure_summary,
+    }
+
+
 def aggregate_risk_warnings(
     instructions: list[dict],
     positions: list[dict],
@@ -899,6 +1019,7 @@ def collect_all(query_date: str | None = None) -> dict:
     trade_prices = aggregate_trade_prices(instructions)
     emergency_repo = aggregate_emergency_repo(emergency_rows)
     money_market = aggregate_money_market(fund_events, date_str)
+    primary_market = aggregate_primary_market(fund_events, date_str)
     risk_warnings = aggregate_risk_warnings(instructions, positions)
     market_commentary = generate_market_commentary(qt_commentary)
 
@@ -941,11 +1062,8 @@ def collect_all(query_date: str | None = None) -> dict:
         # 资金、现券、一级市场分析文字（基于 QT 短评）
         "market_commentary": market_commentary,
 
-        # 板块 11：一级市场（无数据源）
-        "primary_market": {
-            "available": False,
-            "reason": "暂无对应 API 数据源",
-        },
+        # 板块 11：一级市场（发行数据来自资金事件日历）
+        "primary_market": primary_market,
 
         # 权益市场分析：由 AI 执行期外部短评输入，纯脚本运行时降级
         "equity_market": build_equity_market_analysis(),
