@@ -334,13 +334,31 @@ def build_equity_market_analysis(commentary: str | None = None) -> dict:
     }
 
 
+def _deduplicate_instructions(records: list[dict]) -> list[dict]:
+    """按指令编号去重，保留修改序号最大的记录。
+
+    O32 接口对同一指令的每次修改都会返回一条新记录（修改序号递增）。
+    聚合前必须去重，否则已修改/已撤销的旧版本会被重复计入统计。
+    """
+    best: dict = {}
+    for r in records:
+        instr_id = r.get("指令编号")
+        mod_seq = r.get("修改序号", 1)
+        if instr_id is None:
+            continue
+        if instr_id not in best or mod_seq > best[instr_id][1]:
+            best[instr_id] = (r, mod_seq)
+    return [v[0] for v in best.values()]
+
+
 def collect_trade_instructions(query_date: str) -> list[dict]:
     """采集 O32 交易指令数据（cat_sql_trade_0019）。
 
-    返回指令列表（产品代码/名称已脱敏，供后续聚合与大模型分析）。
+    返回指令列表（已按指令编号去重保留最新修改序号，产品代码/名称已脱敏）。
     """
     result = call_sql_api("cat_sql_trade_0019", {"queryDate": int(query_date)})
     records = result.get("body", [])
+    records = _deduplicate_instructions(records)
     return [mask_product_fields(r) for r in records]
 
 
