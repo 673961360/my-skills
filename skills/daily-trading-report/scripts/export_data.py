@@ -20,7 +20,7 @@ sys.path.insert(0, str(PROJECT_DIR))
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
-from api_client import get_config
+from api_client import get_config, clear_api_cache
 from data_collector import (
     collect_all,
     _parse_date,
@@ -95,23 +95,31 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="导出当日原始数据到 Excel")
     p.add_argument("--date", type=str, default=None, help="查询日期 YYYYMMDD（默认当日）")
     p.add_argument("--output", type=str, default=None, help="输出路径（默认 output/全部数据_YYYYMMDD.xlsx）")
-    p.add_argument("--env", type=str, default="prod",
-                   choices=["test", "prod"], help="目标环境（默认 prod）")
+    p.add_argument("--env", type=str, default=None,
+                   choices=["test", "prod"], help="目标环境；优先级高于环境变量 DTR_ENV 和 config.json 的 env 字段")
     p.add_argument("--use-cache", action="store_true", default=False,
                    help="使用缓存的 API 响应（调试模式）")
+    p.add_argument("--refresh-cache", action="store_true", default=False,
+                   help="清除旧缓存后重新拉取并缓存（不生成日报）")
     return p.parse_args()
 
 
 def main():
     args = parse_args()
-    os.environ["DTR_ENV"] = args.env
-    if args.use_cache:
+    if args.env is not None:
+        os.environ["DTR_ENV"] = args.env
+    if args.use_cache or args.refresh_cache:
         os.environ["DTR_USE_CACHE"] = "true"
+    if args.refresh_cache:
+        removed = clear_api_cache()
+        for name in removed:
+            print(f"  🗑️  已删除缓存: {name}")
 
     query_date = _parse_date(args.date)
     display_date = _fmt_display_date(query_date)
 
-    print(f"日期: {display_date}  环境: {args.env}  缓存: {'ON' if args.use_cache else 'OFF'}")
+    cfg = get_config()
+    print(f"日期: {display_date}  环境: {cfg['_env']}  缓存: {'ON' if args.use_cache else 'OFF'}")
     print("采集数据...")
     data = collect_all(query_date)
 

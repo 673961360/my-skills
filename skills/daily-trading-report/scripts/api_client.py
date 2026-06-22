@@ -56,6 +56,19 @@ _CACHE_WHITELIST = {
 }
 
 
+def clear_api_cache() -> list[str]:
+    """清除白名单内所有接口的缓存文件，返回被删除的文件名列表。"""
+    cache_dir = _get_cache_dir()
+    removed = []
+    if not cache_dir.exists():
+        return removed
+    for path in cache_dir.glob("*.json"):
+        if any(path.name.startswith(api_id) for api_id in _CACHE_WHITELIST):
+            path.unlink()
+            removed.append(path.name)
+    return removed
+
+
 def _read_cache(api_id: str, params: dict | None) -> dict | None:
     """读缓存，未命中返回 None。仅白名单内接口生效。"""
     if not _is_cache_enabled() or api_id not in _CACHE_WHITELIST:

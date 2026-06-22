@@ -27,7 +27,7 @@ if sys.platform == "win32":
 PROJECT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_DIR))
 
-from api_client import get_config
+from api_client import get_config, clear_api_cache
 from data_collector import collect_all, _parse_date, _fmt_display_date, build_equity_market_analysis
 from chart_builder import build_all_charts
 
@@ -111,15 +111,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--env",
         type=str,
-        default=os.getenv("DTR_ENV", "test"),
+        default=None,
         choices=["test", "prod"],
-        help="目标环境：test（默认）/ prod；也可用环境变量 DTR_ENV 指定",
+        help="目标环境；优先级高于环境变量 DTR_ENV 和 config.json 的 env 字段",
     )
     parser.add_argument(
         "--use-cache",
         action="store_true",
         default=False,
         help="使用缓存的 API 响应（调试模式，跳过实时采集）",
+    )
+    parser.add_argument(
+        "--refresh-cache",
+        action="store_true",
+        default=False,
+        help="清除旧缓存后重新拉取并缓存",
     )
     return parser.parse_args()
 
@@ -129,11 +135,18 @@ def main():
     args = parse_args()
 
     # 设定目标环境（供 api_client / db_client 的配置加载读取）
-    os.environ["DTR_ENV"] = args.env
+    # 仅在命令行显式指定时才覆盖环境变量，否则让 config_loader 按优先级解析
+    if args.env is not None:
+        os.environ["DTR_ENV"] = args.env
 
     # 缓存模式
-    if args.use_cache:
+    if args.use_cache or args.refresh_cache:
         os.environ["DTR_USE_CACHE"] = "true"
+    if args.refresh_cache:
+        removed = clear_api_cache()
+        for name in removed:
+            print(f"  🗑️  已删除缓存: {name}")
+    if args.use_cache:
         print(f"  🗄️  缓存模式：ON（跳过实时 API 调用）")
 
     # 确定日期
@@ -150,7 +163,7 @@ def main():
     # Step 1: 加载配置
     cfg = get_config()
     print(f"\n[1/4] 配置加载完成")
-    print(f"  环境: {args.env}")
+    print(f"  环境: {cfg['_env']}")
     print(f"  API: {cfg['api_base_url']}")
     print(f"  输出目录: {cfg.get('output_dir', 'reports')}")
 
