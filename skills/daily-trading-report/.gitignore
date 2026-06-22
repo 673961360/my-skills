@@ -13,6 +13,6 @@ __pycache__/
 .python-version
 
 # 含敏感凭据（API key、数据库密码）
-config.json
-config.prod.json
+config/config.json
+config/config.prod.json
 *.stackdump

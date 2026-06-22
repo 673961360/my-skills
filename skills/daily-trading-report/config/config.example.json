@@ -1,4 +1,5 @@
 {
+  "env": "test",
   "api_base_url": "https://your-ai-gateway-host/ai-gateway",
   "api_key": "sk-your-api-key-here",
   "output_dir": "reports",

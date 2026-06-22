@@ -81,10 +81,11 @@ uv run python scripts/export_data.py --use-cache
 
 ## 配置文件
 
-`config.json` 关键字段（完整脱敏模板见 `config.example.json`）：
+`config/config.json` 关键字段（完整脱敏模板见 `config/config.example.json`）：
 
 ```json
 {
+  "env": "test",
   "api_base_url": "https://aitest.cjhxfund.com/ai-gateway",
   "api_key": "sk-...",
   "output_dir": "reports",
