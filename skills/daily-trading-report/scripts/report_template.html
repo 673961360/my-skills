@@ -605,34 +605,33 @@
     {% endif %}
 
     <div class="template-subtitle">预测结论</div>
-    {% if market_forecast.available %}
-    <div class="analysis-box">{{ market_forecast.conclusion }}</div>
-    {% else %}
-    <div class="empty-data">{{ market_forecast.conclusion }}</div>
-    {% endif %}
-
-    <div class="inline-heading">关键指标</div>
-    {% if market_forecast.indicators %}
+    {% if market_forecast.rows %}
     <table>
       <thead>
         <tr>
-          <th>指标</th>
-          <th>数值/方向</th>
-          <th>来源</th>
+          <th>资产类型</th>
+          <th>核心类型</th>
+          <th>具体指标</th>
+          <th>当日行情</th>
+          <th>明日预测点位区间</th>
+          <th>明日预测趋势</th>
         </tr>
       </thead>
       <tbody>
-        {% for indicator in market_forecast.indicators %}
+        {% for row in market_forecast.rows %}
         <tr>
-          <td>{{ indicator.name }}</td>
-          <td>{{ indicator.value }}</td>
-          <td>{{ indicator.source }}</td>
+          <td>{{ row.asset_type }}</td>
+          <td>{{ row.core_type }}</td>
+          <td>{{ row.indicator }}</td>
+          <td>{{ row.current }}</td>
+          <td>{{ row.forecast_point }}</td>
+          <td class="{% if row.trend in ['上行', '不松', '正'] %}highlight-red{% elif row.trend in ['下行', '偏松'] %}highlight-green{% elif row.trend == '持平' %}highlight-orange{% endif %}">{{ row.trend }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     {% else %}
-    <div class="empty-data">暂无相关数据</div>
+    <div class="empty-data">{{ market_forecast.conclusion }}</div>
     {% endif %}
 
     <div class="inline-heading">方法说明</div>

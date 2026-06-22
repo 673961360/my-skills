@@ -71,6 +71,7 @@ def build_sample_data() -> dict:
         "market_forecast": {
             "available": False,
             "conclusion": "预测指标来源尚未确认",
+            "rows": [],
             "indicators": [],
             "methodology": "资金利率、公开市场操作、债券收益率曲线和 QT 情绪等预测指标尚未完成来源确认，暂不生成方向性预测。",
             "sources": [],
@@ -327,6 +328,8 @@ class TemplateContractTest(unittest.TestCase):
 
         self.assertFalse(forecast["available"])
         self.assertEqual("预测指标来源尚未确认", forecast["conclusion"])
+        self.assertEqual(6, len(forecast["rows"]))
+        self.assertEqual("暂无有效消息", forecast["rows"][0]["current"])
         self.assertEqual([], forecast["indicators"])
         self.assertIn("资金利率", forecast["methodology"])
         self.assertIn("债券收益率曲线", forecast["methodology"])
@@ -339,12 +342,30 @@ class TemplateContractTest(unittest.TestCase):
             ],
             {"has_data": True, "omo_net_inject": -200, "gov_bond_payment": 300},
             {"funding": "资金面偏紧，融入需求较多。", "bond": "现券收益率上行，OFR 增多。"},
+            {
+                "treasury_curve": {
+                    "available": True,
+                    "points": [{"term": "10", "yield": "1.7275"}],
+                },
+                "equity_indices": {
+                    "available": True,
+                    "indices": [
+                        {"name": "上证指数", "latest": "4108", "pct_change": "0.2"},
+                        {"name": "创业板指", "latest": "4167", "pct_change": "0.5"},
+                    ],
+                },
+            },
         )
 
         self.assertTrue(forecast["available"])
-        self.assertIn("资金面预测", forecast["conclusion"])
-        self.assertIn("现券市场预测", forecast["conclusion"])
-        self.assertIn("规则评分法", forecast["methodology"])
+        self.assertEqual("市场预测汇总表", forecast["conclusion"])
+        self.assertIn("资金面当日行情", forecast["methodology"])
+        self.assertEqual(6, len(forecast["rows"]))
+        self.assertEqual("资金", forecast["rows"][0]["asset_type"])
+        self.assertEqual("不松", forecast["rows"][0]["current"])
+        self.assertEqual("现券", forecast["rows"][1]["asset_type"])
+        self.assertEqual("1.7275", forecast["rows"][1]["current"])
+        self.assertEqual("上证指数", forecast["rows"][2]["indicator"])
         self.assertGreaterEqual(len(forecast["indicators"]), 5)
         self.assertIn("O32 回购行情 cat_sql_trade_0012", forecast["sources"])
 
@@ -556,11 +577,10 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn('alt="回购利率图"', forecast_html)
         self.assertIn("<td><strong>R001</strong></td>", forecast_html)
         self.assertIn("预测结论", forecast_html)
-        self.assertIn("关键指标", forecast_html)
+        self.assertIn("资产类型", forecast_html)
+        self.assertIn("明日预测点位区间", forecast_html)
         self.assertIn("方法说明", forecast_html)
-        self.assertIn("资金面预测", forecast_html)
-        self.assertIn("R001 最新利率", forecast_html)
-        self.assertIn("O32 回购行情 cat_sql_trade_0012", forecast_html)
+        self.assertIn("资金面判断", forecast_html)
         self.assertNotIn("预测指标来源尚未确认", forecast_html)
         self.assertNotIn("趋势预测准确率", forecast_html)
         self.assertNotIn("区间预测准确率", forecast_html)

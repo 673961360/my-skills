@@ -12,6 +12,7 @@ from typing import Any
 
 from api_client import call_sql_api, call_api, call_form_api
 from desensitize import mask_product_fields
+from external_market import collect_external_market_indicators
 
 
 def _parse_date(date_str: str | None) -> str:
@@ -48,11 +49,54 @@ def _as_float(value: Any) -> float | None:
         return None
 
 
-def build_market_forecast(repo_rates: list[dict], money_market: dict, market_commentary: dict) -> dict:
-    """Build an explainable market forecast from available deterministic indicators."""
+def _fmt_point(value: float | None, digits: int = 2) -> str:
+    if value is None:
+        return "暂无相关数据"
+    return f"{value:.{digits}f}"
+
+
+def _trend_from_score(score: float, up_label: str = "上行", down_label: str = "下行") -> str:
+    if score >= 1.0:
+        return up_label
+    if score <= -1.0:
+        return down_label
+    return "持平"
+
+
+def _funding_condition(text: str) -> str:
+    if not text or text == "暂无有效消息":
+        return "暂无有效消息"
+    if any(word in text for word in ["不松", "偏紧", "紧张", "资金难借", "融入需求"]):
+        return "不松"
+    if any(word in text for word in ["偏松", "宽松", "融出意愿较强"]):
+        return "偏松"
+    if any(word in text for word in ["平稳", "均衡"]):
+        return "均衡"
+    return "不松"
+
+
+def _forecast_point(current: float | None, trend: str, step: float, digits: int = 2) -> str:
+    if current is None:
+        return "\\"
+    if trend == "上行":
+        return _fmt_point(current + step, digits)
+    if trend == "下行":
+        return _fmt_point(max(current - step, 0), digits)
+    return _fmt_point(current, digits)
+
+
+def build_market_forecast(
+    repo_rates: list[dict],
+    money_market: dict,
+    market_commentary: dict,
+    external_market: dict | None = None,
+) -> dict:
+    """Build the forecast table shown in the reference report."""
     indicators: list[dict[str, str]] = []
+    rows: list[dict[str, str]] = []
     funding_score = 0.0
     bond_score = 0.0
+    external_market = external_market or {}
 
     for rate in repo_rates[:6]:
         name = str(rate.get("SECURITY_NAME") or rate.get("SECURITY_CODE") or "").strip()
@@ -65,7 +109,7 @@ def build_market_forecast(repo_rates: list[dict], money_market: dict, market_com
         indicators.append({
             "name": f"{name} 最新利率",
             "value": f"{latest:.2f}%",
-            "source": "O32 回购行情 cat_sql_trade_0012",
+            "source": str(rate.get("SOURCE") or "O32 回购行情 cat_sql_trade_0012"),
         })
         if name in {"R001", "DR001"}:
             if latest >= 2.0:
@@ -104,18 +148,15 @@ def build_market_forecast(repo_rates: list[dict], money_market: dict, market_com
             funding_score -= 0.5
 
     funding_text = str(market_commentary.get("funding", ""))
+    funding_condition = _funding_condition(funding_text)
     if funding_text and funding_text != "暂无有效消息":
-        if any(word in funding_text for word in ["偏紧", "紧张", "资金难借"]):
+        if funding_condition in {"不松", "偏紧"}:
             funding_score += 1.0
-            sentiment = "偏紧"
-        elif any(word in funding_text for word in ["宽松", "融出意愿较强"]):
+        elif funding_condition == "偏松":
             funding_score -= 1.0
-            sentiment = "偏松"
-        else:
-            sentiment = "均衡"
         indicators.append({
             "name": "QT 资金面情绪",
-            "value": sentiment,
+            "value": funding_condition,
             "source": "QT 资金面短评",
         })
 
@@ -135,50 +176,123 @@ def build_market_forecast(repo_rates: list[dict], money_market: dict, market_com
             "source": "QT 现券短评",
         })
 
-    if not indicators:
+    curve = external_market.get("treasury_curve", {})
+    if curve.get("available"):
+        for point in curve.get("points", []):
+            term = str(point.get("term", ""))
+            yield_value = _as_float(point.get("yield"))
+            if yield_value is None:
+                continue
+            if term in {"1", "10"}:
+                indicators.append({
+                    "name": f"国债 {term}Y 收盘收益率",
+                    "value": f"{yield_value:.4f}%",
+                    "source": "中国货币网债券收盘收益率曲线",
+                })
+            if term == "10":
+                if yield_value >= 2.2:
+                    bond_score += 0.5
+                elif yield_value <= 1.8:
+                    bond_score -= 0.5
+
+    funding_trend = funding_condition if funding_condition != "暂无有效消息" else "暂无判断"
+    rows.append({
+        "asset_type": "资金",
+        "core_type": "资金面",
+        "indicator": "资金面判断",
+        "current": funding_condition,
+        "forecast_point": "\\",
+        "trend": funding_trend,
+    })
+
+    treasury_10y = None
+    if curve.get("available"):
+        for point in curve.get("points", []):
+            if str(point.get("term")) == "10":
+                treasury_10y = _as_float(point.get("yield"))
+                break
+    bond_score += max(min(funding_score / 2, 1.0), -1.0)
+    bond_trend = _trend_from_score(bond_score)
+    rows.append({
+        "asset_type": "现券",
+        "core_type": "10年国债",
+        "indicator": "10Y国债收益率",
+        "current": _fmt_point(treasury_10y, 4),
+        "forecast_point": _forecast_point(treasury_10y, bond_trend, 0.01, 4),
+        "trend": bond_trend if treasury_10y is not None else "暂无判断",
+    })
+
+    equity_indices = {
+        row.get("name"): row for row in external_market.get("equity_indices", {}).get("indices", [])
+    }
+    for display_name, source_name in [("上证指数", "上证指数"), ("创业板", "创业板指")]:
+        quote = equity_indices.get(source_name, {})
+        latest = _as_float(quote.get("latest"))
+        pct_change = _as_float(quote.get("pct_change")) or 0.0
+        trend = "上行" if pct_change > 0 else "下行" if pct_change < 0 else "持平"
+        if latest is not None:
+            indicators.append({
+                "name": display_name,
+                "value": _fmt_point(latest, 2),
+                "source": "东方财富行情中心",
+            })
+        rows.append({
+            "asset_type": "权益",
+            "core_type": "行情指数",
+            "indicator": display_name,
+            "current": _fmt_point(latest, 2),
+            "forecast_point": _forecast_point(latest, trend, (latest or 0) * 0.002, 2),
+            "trend": trend if latest is not None else "暂无判断",
+        })
+
+    primary_text = str(market_commentary.get("primary", ""))
+    cd_rate = None
+    for token in primary_text.replace("%", " ").replace("，", " ").split():
+        parsed = _as_float(token)
+        if parsed is not None and 0.5 <= parsed <= 5:
+            cd_rate = parsed
+            break
+    spread_direction = "正" if any(word in primary_text for word in ["正", "走阔", "利差"]) else "暂无判断"
+    rows.extend([
+        {
+            "asset_type": "一级",
+            "core_type": "行情指数",
+            "indicator": "1Y大行CD发行",
+            "current": _fmt_point(cd_rate, 3),
+            "forecast_point": _fmt_point(cd_rate, 3) if cd_rate is not None else "\\",
+            "trend": "持平" if cd_rate is not None else "暂无判断",
+        },
+        {
+            "asset_type": "一级",
+            "core_type": "行情指数",
+            "indicator": "1Y大行CD二级利差",
+            "current": spread_direction,
+            "forecast_point": "\\",
+            "trend": spread_direction,
+        },
+    ])
+
+    available = any(row["current"] not in {"暂无相关数据", "暂无有效消息", "暂无判断"} for row in rows)
+    if not available and not indicators:
         return {
             "available": False,
             "conclusion": "预测指标来源尚未确认",
+            "rows": rows,
             "indicators": [],
             "methodology": "资金利率、公开市场操作、债券收益率曲线和 QT 情绪等预测指标尚未完成来源确认，暂不生成方向性预测。",
             "sources": [],
             "reason": "当前预测指标数据源尚未完成映射，暂不生成方向性预测。",
         }
 
-    if funding_score >= 1.5:
-        funding_view = "偏紧"
-        funding_detail = "资金价格或流动性扰动信号占优，明日资金面需按偏紧情形准备。"
-    elif funding_score <= -1.5:
-        funding_view = "偏松"
-        funding_detail = "流动性投放或资金价格低位信号占优，明日资金面预计偏松。"
-    else:
-        funding_view = "均衡"
-        funding_detail = "利率、公开市场和交易员情绪信号未形成单边压力，明日资金面预计维持均衡。"
-
-    bond_score += max(min(funding_score / 2, 1.0), -1.0)
-    if bond_score >= 1.0:
-        bond_view = "收益率上行压力略大"
-        bond_detail = "资金面约束或现券卖压信号偏强，利率债交易宜控制久期暴露。"
-    elif bond_score <= -1.0:
-        bond_view = "收益率下行机会略占优"
-        bond_detail = "资金面支持或现券买盘信号偏强，利率债情绪预计偏暖。"
-    else:
-        bond_view = "震荡"
-        bond_detail = "资金和现券信号分化，收益率方向暂不具备强趋势。"
-
-    conclusion = (
-        f"资金面预测：下一交易日资金面预计{funding_view}，{funding_detail}\n"
-        f"现券市场预测：利率债预计{bond_view}，{bond_detail}\n"
-        "风险提示：央行公开市场操作、政府债缴款、跨季/月末扰动和海外利率变化可能改变上述判断。"
-    )
     methodology = (
-        "采用规则评分法：短端回购利率高位、OMO 净回笼、政府债缴款增加、QT 资金面偏紧均提高资金面偏紧评分；"
-        "流动性投放、短端利率低位和 QT 宽松表述降低偏紧评分。现券方向在资金面评分基础上叠加 QT 现券情绪，"
-        "形成收益率上行、下行或震荡判断。缺少外部收益率曲线和活跃券成交时，现券预测只作为低置信度方向判断。"
+        "资金面当日行情来自 17 点后 QT 资金短评中的情绪判断；OMO 净投放和政府债缴款继续使用 cat_sql_trade_0013 作为资金扰动校验。"
+        "现券行使用中国货币网国债收盘收益率曲线，权益行使用外部指数行情并做短线动量外推。"
+        "一级 CD 行优先从一级发行短评中抽取发行利率和利差方向；缺少对应短评时明确降级，不编造点位。"
     )
     return {
         "available": True,
-        "conclusion": conclusion,
+        "conclusion": "市场预测汇总表",
+        "rows": rows,
         "indicators": indicators,
         "methodology": methodology,
         "sources": sorted({indicator["source"] for indicator in indicators}),
@@ -869,6 +983,13 @@ def collect_all(query_date: str | None = None) -> dict:
                          "现券": {"count": 0, "messages": []}, "一级发行": {"count": 0, "messages": []},
                          "其他": {"count": 0, "messages": []}}
 
+    external_market = {}
+    try:
+        external_market = collect_external_market_indicators()
+    except Exception as e:
+        print(f"[警告] 外部市场指标采集失败（非关键，继续）: {e}")
+        external_market = {}
+
     # 数据聚合
     trade_overview = aggregate_trade_overview(instructions)
     trade_count_hourly = aggregate_trade_count_by_hour(instructions)
@@ -877,6 +998,8 @@ def collect_all(query_date: str | None = None) -> dict:
     money_market = aggregate_money_market(fund_events, date_str)
     risk_warnings = aggregate_risk_warnings(instructions, positions, settlement_rows)
     market_commentary = generate_market_commentary(qt_commentary)
+
+    forecast_repo_rates = repo_rates or external_market.get("repo_rates", {}).get("repo_rates", [])
 
     return {
         # 基础信息
@@ -900,8 +1023,8 @@ def collect_all(query_date: str | None = None) -> dict:
         "settlement_forecast": settlement_forecast,
 
         # 03 市场预测汇总（回购行情 + 预测方法）
-        "repo_rates": repo_rates,
-        "market_forecast": build_market_forecast(repo_rates, money_market, market_commentary),
+        "repo_rates": forecast_repo_rates,
+        "market_forecast": build_market_forecast(forecast_repo_rates, money_market, market_commentary, external_market),
 
         # 04 资金市场分析
         "money_market": money_market,
@@ -934,6 +1057,7 @@ def collect_all(query_date: str | None = None) -> dict:
         "_instructions": instructions,
         "_positions": positions,
         "_settlement_rows": settlement_rows,
-        "_repo_rates": repo_rates,
+        "_repo_rates": forecast_repo_rates,
         "_fund_events": fund_events,
+        "_external_market": external_market,
     }
