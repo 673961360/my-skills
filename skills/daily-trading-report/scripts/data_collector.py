@@ -6,12 +6,13 @@
 """
 
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import Any
 
 from api_client import call_sql_api, call_api, call_form_api
-from desensitize import mask_product_fields
+from desensitize import mask_product_fields, mask_product_name
 from external_market import collect_external_market_indicators
 
 
@@ -73,6 +74,38 @@ def _funding_condition(text: str) -> str:
     if any(word in text for word in ["平稳", "均衡"]):
         return "均衡"
     return "不松"
+
+
+def _fmt_money_amount(value: float | None) -> str:
+    if value is None:
+        return "\\"
+    if abs(value - round(value)) < 0.005:
+        return f"{value:.0f}"
+    return f"{value:.2f}"
+
+
+def _fmt_net_inject(value: float | None) -> str:
+    if value is None:
+        return "\\"
+    sign = "+" if value > 0 else ""
+    if abs(value - round(value)) < 0.005:
+        return f"{sign}{value:.0f}"
+    return f"{sign}{value:.2f}"
+
+
+def _normalize_omo_project(name: str, term: str) -> str:
+    text = f"{name}{term}"
+    if "逆回购" in text:
+        if "7" in text:
+            return "7天逆回购"
+        return "逆回购"
+    if "MLF" in text.upper():
+        return "MLF"
+    if "买断式" in text:
+        return "买断式逆回购"
+    if "国库" in text:
+        return "国库定存"
+    return name or term or "公开市场操作"
 
 
 def _forecast_point(current: float | None, trend: str, step: float, digits: int = 2) -> str:
@@ -490,60 +523,127 @@ def is_trading_day(query_date: str, calendar_data: list[dict] | None = None) -> 
 
 
 def aggregate_trade_overview(instructions: list[dict]) -> dict:
-    """聚合交易额度总览数据。
+    """聚合交易数据汇总。
 
-    按「业务分类」+「委托方向」分组，统计：
-    - 总笔数
-    - 指令总金额
-    - 成交总金额
+    汇总口径固定为日报模板中的四类：现券、资金、权益、一级。
+    金额按指令金额统计，单位在模板中换算为亿元。
     """
-    overview: dict[str, dict[str, Any]] = {}
+    categories = ("现券", "资金", "权益", "一级")
+    overview: dict[str, dict[str, Any]] = {
+        category: {"买入金额": 0.0, "卖出金额": 0.0, "买入笔数": 0, "卖出笔数": 0}
+        for category in categories
+    }
+
+    def classify_trade(direction: str) -> str | None:
+        if direction in {"分销买入", "分销卖出"}:
+            return "一级"
+        if direction in {"债券买入", "债券卖出"}:
+            return "现券"
+        if direction in {"融资回购", "融券回购"}:
+            return "资金"
+        if direction in {"买入", "卖出"}:
+            return "权益"
+        return None
+
+    def classify_side(direction: str) -> str | None:
+        if direction in {"买入", "债券买入", "分销买入", "融券回购"}:
+            return "买入"
+        if direction in {"卖出", "债券卖出", "分销卖出", "融资回购"}:
+            return "卖出"
+        return None
 
     for inst in instructions:
-        biz_type = inst.get("业务分类", "未知")
-        direction = inst.get("委托方向", "未知")
+        direction = str(inst.get("委托方向", ""))
         status = inst.get("指令状态", "")
 
         # 过滤已撤销指令
         if "撤销" in status:
             continue
 
-        key = f"{biz_type}·{direction}"
-        if key not in overview:
-            overview[key] = {"笔数": 0, "指令金额": 0.0, "成交金额": 0.0}
+        category = classify_trade(direction)
+        side = classify_side(direction)
+        if category is None or side is None:
+            continue
 
-        overview[key]["笔数"] += 1
-        overview[key]["指令金额"] += float(inst.get("指令金额", 0) or 0)
-        overview[key]["成交金额"] += float(inst.get("成交金额", 0) or 0)
+        overview[category][f"{side}笔数"] += 1
+        overview[category][f"{side}金额"] += float(inst.get("指令金额", 0) or 0)
 
     # 汇总
-    total_count = sum(v["笔数"] for v in overview.values())
-    total_amount = sum(v["指令金额"] for v in overview.values())
-    total_deal = sum(v["成交金额"] for v in overview.values())
+    total_count = sum(v["买入笔数"] + v["卖出笔数"] for v in overview.values())
+    total_amount = sum(v["买入金额"] + v["卖出金额"] for v in overview.values())
 
     return {
         "分类明细": overview,
         "总笔数": total_count,
         "总指令金额": total_amount,
-        "总成交金额": total_deal,
+        "总成交金额": total_amount,
     }
 
 
 def aggregate_trade_count_by_hour(instructions: list[dict]) -> dict:
-    """按小时聚合交易笔数（日内分布）。"""
-    hourly: dict[str, int] = {}
+    """聚合当日交易笔数。
+
+    0019 目前只能查单日，因此交易笔数先按当日方向分类展示，不生成历史序列。
+    """
+    categories = ["现券买入", "现券卖出", "正回购", "逆回购", "权益买入", "权益卖出", "分销买入", "分销卖出"]
+    counts = {category: 0 for category in categories}
+    total = 0
 
     for inst in instructions:
-        time_val = inst.get("指令下达时间", 0)
-        if not time_val:
+        if "撤销" in str(inst.get("指令状态", "")):
             continue
-        # 时间格式 HHMMSS（整数），提取小时
-        hour = int(time_val) // 10000
-        hour_str = f"{hour:02d}:00"
-        hourly[hour_str] = hourly.get(hour_str, 0) + 1
+        bucket = _trade_count_bucket(str(inst.get("委托方向", "")))
+        if bucket:
+            total += 1
+            counts[bucket] += 1
 
-    # 按时间排序
-    return dict(sorted(hourly.items()))
+    return {
+        "total": total,
+        "year_total": None,
+        "categories": categories,
+        "counts": counts,
+    }
+
+
+def _trade_count_bucket(direction: str) -> str | None:
+    mapping = {
+        "债券买入": "现券买入",
+        "债券卖出": "现券卖出",
+        "融资回购": "正回购",
+        "融券回购": "逆回购",
+        "买入": "权益买入",
+        "卖出": "权益卖出",
+        "分销买入": "分销买入",
+        "分销卖出": "分销卖出",
+    }
+    return mapping.get(direction)
+
+
+def aggregate_trade_amount_by_direction(instructions: list[dict]) -> dict:
+    """聚合当日交易金额。
+
+    与交易笔数使用同一组方向分类。金额单位在模板/图表中换算为亿元。
+    """
+    categories = ["现券买入", "现券卖出", "正回购", "逆回购", "权益买入", "权益卖出", "分销买入", "分销卖出"]
+    amounts = {category: 0.0 for category in categories}
+    total = 0.0
+
+    for inst in instructions:
+        if "撤销" in str(inst.get("指令状态", "")):
+            continue
+        bucket = _trade_count_bucket(str(inst.get("委托方向", "")))
+        if not bucket:
+            continue
+        amount = float(inst.get("指令金额", 0) or 0)
+        amounts[bucket] += amount
+        total += amount
+
+    return {
+        "total": total,
+        "year_total": None,
+        "categories": categories,
+        "amounts": amounts,
+    }
 
 
 def aggregate_trade_prices(instructions: list[dict]) -> dict:
@@ -595,7 +695,7 @@ def aggregate_trade_prices(instructions: list[dict]) -> dict:
 def aggregate_emergency_repo(rows: list[dict]) -> dict:
     """聚合应急回购明细，供 02 板块渲染。
 
-    按指令下达时间升序排列；同一 productId 多笔记录映射到同一「产品N」编号。
+    按指令下达时间升序排列，产品名称按规则脱敏展示。
     """
     if not rows:
         return {"has_data": False, "明细": [], "总笔数": 0, "总金额万元": 0.0}
@@ -604,35 +704,29 @@ def aggregate_emergency_repo(rows: list[dict]) -> dict:
         rows, key=lambda r: _direct_time_hhmmss(r.get("repoInsDirectTimeText", ""))
     )
 
-    product_index: dict[str, str] = {}
-    counter = 0
     items: list[dict] = []
     for row in sorted_rows:
-        pid = str(row.get("productId") or row.get("productCode") or "")
-        if pid not in product_index:
-            counter += 1
-            product_index[pid] = f"产品{counter}"
-
-        # 利率：优先 repoPriceText（如 'R+0BP'），为空回退 repurRate
-        rate_text = (row.get("repoPriceText") or "").strip()
-        利率 = rate_text if rate_text else str(row.get("repurRate", "0") or "0")
+        direct_time = _direct_time_hhmmss(row.get("repoInsDirectTimeText", ""))
+        if direct_time:
+            hour, minute = direct_time.split(":")[:2]
+            reason = f"{int(hour)}点{int(minute):02d}分未到账"
+        else:
+            reason = "16点后未到账"
 
         items.append({
             "序号": len(items) + 1,
-            "产品编号": product_index[pid],
-            "回购金额万元": round(float(row.get("repurAmt", 0) or 0) / 10000, 2),
-            "期限天": int(row.get("repurDay", 0) or 0),
-            "利率": 利率,
-            "对手方": row.get("rivalName", "") or "",
-            "操作时间": _direct_time_hhmmss(row.get("repoInsDirectTimeText", "")),
-            "状态": row.get("inqResStatusText", "") or "",
+            "应急产品": mask_product_name(row.get("productName", "") or row.get("productCode", "") or ""),
+            "应急金额万元": round(float(row.get("repurAmt", 0) or 0) / 10000, 2),
+            "应收业务类型": f"{row.get('sideCodeText', '') or '正回购'}到期",
+            "应收交易对手": row.get("rivalName", "") or "",
+            "应急原因": reason,
         })
 
     return {
         "has_data": True,
         "明细": items,
         "总笔数": len(items),
-        "总金额万元": round(sum(x["回购金额万元"] for x in items), 2),
+        "总金额万元": round(sum(x["应急金额万元"] for x in items), 2),
     }
 
 
@@ -650,6 +744,7 @@ def aggregate_money_market(events: list[dict], query_date: str = "") -> dict:
     if not events:
         return {
             "omo_operations": [],
+            "omo_summary_rows": [],
             "omo_net_inject": 0.0,
             "bond_maturities": [],
             "gov_bond_payment": 0.0,
@@ -687,6 +782,7 @@ def aggregate_money_market(events: list[dict], query_date: str = "") -> dict:
 
     # 按事件类型分组
     omo_summary = []
+    omo_by_project: dict[str, dict[str, Any]] = {}
     omo_net = 0.0
     bond_mat = []
     gov_pay = 0.0
@@ -704,6 +800,22 @@ def aggregate_money_market(events: list[dict], query_date: str = "") -> dict:
                 omo_net = val
             else:
                 direction = dim3
+                project = _normalize_omo_project(dim1, dim2)
+                row = omo_by_project.setdefault(
+                    project,
+                    {"项目": project, "规模（亿元）": 0.0, "利率": "\\", "到期量（亿元）": 0.0},
+                )
+                rate = evt.get("RATE") or evt.get("INT_RATE") or evt.get("利率")
+                if rate not in (None, "", "ALL"):
+                    try:
+                        rate_val = float(rate)
+                        row["利率"] = f"{rate_val:.2f}%"
+                    except (TypeError, ValueError):
+                        row["利率"] = str(rate)
+                if direction in ("投放", "发行", "缴款"):
+                    row["规模（亿元）"] += val
+                elif direction in ("回笼", "到期"):
+                    row["到期量（亿元）"] += val
                 omo_summary.append({
                     "操作": dim1,
                     "期限": dim2 if dim2 != "ALL" else "—",
@@ -733,9 +845,25 @@ def aggregate_money_market(events: list[dict], query_date: str = "") -> dict:
         elif item["方向"] in ("发行", "缴款"):
             bond_by_type[key]["发行(亿)"] += item["金额(亿)"]
 
+    omo_summary_rows = []
+    derived_omo_net = 0.0
+    for row in omo_by_project.values():
+        net = row["规模（亿元）"] - row["到期量（亿元）"]
+        derived_omo_net += net
+        omo_summary_rows.append({
+            "项目": row["项目"],
+            "规模（亿元）": round(row["规模（亿元）"], 2),
+            "利率": row["利率"],
+            "到期量（亿元）": round(row["到期量（亿元）"], 2),
+            "净投放（亿元）": round(net, 2),
+        })
+    if not omo_net and derived_omo_net:
+        omo_net = derived_omo_net
+
     return {
         "data_date": display_date,
         "omo_operations": omo_summary,
+        "omo_summary_rows": sorted(omo_summary_rows, key=lambda x: abs(x["净投放（亿元）"]), reverse=True),
         "omo_net_inject": round(omo_net, 2),
         "bond_maturities": sorted(bond_by_type.values(), key=lambda x: x["到期(亿)"], reverse=True),
         "gov_bond_payment": round(gov_pay, 2),
@@ -924,6 +1052,234 @@ def _clean_commentary_body(content: str) -> str:
     return "\n".join(lines)
 
 
+def _compact_sentence(text: str, max_len: int = 42) -> str:
+    text = re.sub(r"\s+", "", text or "")
+    if not text:
+        return "—"
+    return text if len(text) <= max_len else text[: max_len - 1] + "…"
+
+
+def _split_commentary_sentences(text: str) -> list[str]:
+    cleaned = _clean_commentary_body(text)
+    parts = re.split(r"[。；;！!？?\n]+", cleaned)
+    return [p.strip(" ：:，,、") for p in parts if p.strip(" ：:，,、")]
+
+
+def _pick_sentence(sentences: list[str], keywords: tuple[str, ...]) -> str:
+    for sentence in sentences:
+        if re.search(r"(资金|存单).{0,8}(早评|午评|日评)", sentence):
+            continue
+        if ("央行" in sentence or "逆回购操作" in sentence) and not any(
+            word in sentence for word in ("资金面", "隔夜", "质押", "成交")
+        ):
+            continue
+        if any(word in sentence for word in keywords):
+            return _compact_sentence(sentence)
+    return "—"
+
+
+def _session_rank(report: dict) -> int:
+    session = str(report.get("session", ""))
+    title = str(report.get("title", ""))
+    time_val = str(report.get("time", ""))
+    content = str(report.get("content", ""))
+    text = f"{session}{title}{content}"
+    if "早评" in text or ("早" in title and "评" in title):
+        return 0
+    if "午评" in text or "午前" in text or "午间" in text:
+        return 2
+    if "日评" in text or "尾盘" in text or "收盘" in text:
+        return 4
+    if time_val:
+        hour_match = re.search(r"(\d{1,2}):", time_val)
+        if hour_match:
+            hour = int(hour_match.group(1))
+            if hour < 10:
+                return 0
+            if hour < 12:
+                return 2
+            if hour < 15:
+                return 3
+            return 4
+    return 4
+
+
+def _period_name(rank: int) -> str:
+    return {
+        0: "早盘（开盘）",
+        1: "OMO操作后",
+        2: "午前",
+        3: "午后（初）",
+        4: "尾盘",
+    }.get(rank, "尾盘")
+
+
+def _period_from_sentence(sentence: str) -> str | None:
+    if "公开市场操作后" in sentence or "OMO操作后" in sentence or "OMO后" in sentence:
+        return "OMO操作后"
+    if "早盘" in sentence or "开盘" in sentence:
+        return "早盘（开盘）"
+    if "临近午盘" in sentence or "午前" in sentence or "午盘" in sentence:
+        return "午前"
+    if "午后" in sentence:
+        return "午后（初）"
+    if "尾盘" in sentence or "收盘" in sentence:
+        return "尾盘"
+    return None
+
+
+def _market_status_from_text(text: str) -> str:
+    if any(word in text for word in ("偏紧", "收紧", "紧张", "融出减少", "融入困难")):
+        return "偏紧"
+    if any(word in text for word in ("偏松", "转松", "宽松", "融出充足")):
+        return "偏松"
+    if any(word in text for word in ("收敛", "转松", "转紧")):
+        return _compact_sentence(_pick_sentence(_split_commentary_sentences(text), ("收敛", "转松", "转紧")), 18)
+    if any(word in text for word in ("均衡", "平稳", "稳定")):
+        return "均衡"
+    return "—"
+
+
+def _summarize_funding_overall(text: str) -> tuple[str, str, str]:
+    sentences = _split_commentary_sentences(text)
+    intraday_sentences = [
+        sentence for sentence in sentences
+        if "资金面" in sentence and sum(1 for word in ("早盘", "午盘", "午后", "尾盘", "全天") if word in sentence) >= 2
+    ]
+    overall = _pick_sentence(intraday_sentences, ("资金面", "全天"))
+    if overall != "—":
+        trend = _pick_sentence(sentences, ("利率", "价格", "下行", "上行", "回落", "抬升", "稳定"))
+        return overall, trend, overall
+    funding_overall_sentences = [
+        sentence for sentence in sentences
+        if "资金面" in sentence and ("全天" in sentence or "整体" in sentence)
+    ]
+    overall = _pick_sentence(funding_overall_sentences, ("全天", "整体"))
+    if overall == "—":
+        overall = _pick_sentence(sentences, ("资金面", "市场"))
+    trend = _pick_sentence(sentences, ("利率", "价格", "下行", "上行", "回落", "抬升", "稳定"))
+    summary = _pick_sentence(sentences, ("小结", "总体", "全天", "尾盘", "资金面"))
+    return overall, trend, summary
+
+
+def _extract_funding_sentiment_index(text: str) -> str:
+    match = re.search(r"情绪指数[：:]\s*([0-9]+(?:\s*[-→~]\s*[0-9]+){1,})", text)
+    if not match:
+        return "\\"
+    return re.sub(r"\s*[-~]\s*", " → ", match.group(1).strip())
+
+
+def enrich_omo_rates_from_commentary(money_market: dict, daily_commentary: dict) -> dict:
+    rows = money_market.get("omo_summary_rows") or []
+    if not rows or all(row.get("利率") not in ("", "\\", "—") for row in rows):
+        return money_market
+
+    text = "\n".join(str(r.get("content", "")) for r in (daily_commentary or {}).get("reports", []))
+    rate_match = re.search(r"(?:操作利率|中标利率)[为]?\s*([0-9]+(?:\.[0-9]+)?)%", text)
+    if not rate_match:
+        return money_market
+    rate = f"{float(rate_match.group(1)):.2f}%"
+    for row in rows:
+        if row.get("利率") in ("", "\\", "—"):
+            row["利率"] = rate
+    return money_market
+
+
+def build_funding_market_status(daily_commentary: dict, fallback_text: str = "") -> dict[str, Any]:
+    """将 QT 资金短评整理成资金市场分析表。
+
+    能识别早/午/尾盘时输出结构化表；否则保留原短评降级展示。
+    """
+    reports = [
+        r for r in (daily_commentary or {}).get("reports", [])
+        if str(r.get("theme", "")) == "资金" and str(r.get("content", "")).strip()
+    ]
+    if not reports:
+        return {"available": False, "writer": "自动", "fallback": fallback_text or "暂无有效消息"}
+
+    period_buckets: dict[str, list[str]] = {
+        "早盘（开盘）": [],
+        "OMO操作后": [],
+        "午前": [],
+        "午后（初）": [],
+        "尾盘": [],
+    }
+    for report in reports:
+        active_period = None
+        for sentence in _split_commentary_sentences(str(report.get("content", ""))):
+            period = _period_from_sentence(sentence)
+            if period:
+                active_period = period
+            else:
+                period = active_period
+            if not period:
+                continue
+            if not any(word in sentence for word in ("资金面", "隔夜", "7D", "7d", "7天", "14D", "14d", "14天", "跨月", "成交", "融出", "利率")):
+                continue
+            period_buckets[period].append(sentence)
+
+    rows = []
+    for period, sentences in period_buckets.items():
+        if not sentences:
+            continue
+        joined = "。".join(sentences)
+        row = {
+            "时段": period,
+            "隔夜": _pick_sentence(sentences, ("隔夜", "O/N", "ofr", "OFR", "押利率")),
+            "7天": _pick_sentence(sentences, ("7天", "7D", "7d", "七天")),
+            "14天跨月": _pick_sentence(sentences, ("14天", "14D", "14d", "跨月")),
+            "市场状态": _market_status_from_text(joined),
+        }
+        meaningful = sum(1 for key in ("隔夜", "7天", "14天跨月", "市场状态") if row[key] != "—")
+        if meaningful >= 2:
+            rows.append(row)
+
+    by_rank: dict[int, dict[str, Any]] = {}
+    for report in reports:
+        rank = _session_rank(report)
+        current = by_rank.get(rank)
+        if current is None or len(str(report.get("content", ""))) > len(str(current.get("content", ""))):
+            by_rank[rank] = report
+
+    all_text_parts = []
+    existing_periods = {row["时段"] for row in rows}
+    for rank in sorted(by_rank):
+        content = str(by_rank[rank].get("content", ""))
+        all_text_parts.append(content)
+        if rows and _period_name(rank) in existing_periods:
+            continue
+        sentences = _split_commentary_sentences(content)
+        row = {
+            "时段": _period_name(rank),
+            "隔夜": _pick_sentence(sentences, ("隔夜", "O/N", "ofr", "OFR", "押利率")),
+            "7天": _pick_sentence(sentences, ("7天", "7D", "7d", "七天")),
+            "14天跨月": _pick_sentence(sentences, ("14天", "14D", "14d", "跨月")),
+            "市场状态": _market_status_from_text(content),
+        }
+        meaningful = sum(1 for key in ("隔夜", "7天", "14天跨月", "市场状态") if row[key] != "—")
+        if meaningful >= 2:
+            rows.append(row)
+
+    period_order = {"早盘（开盘）": 0, "OMO操作后": 1, "午前": 2, "午后（初）": 3, "尾盘": 4}
+    rows.sort(key=lambda row: period_order.get(row["时段"], 99))
+    period_count = len({row["时段"] for row in rows})
+    if period_count < 2:
+        return {"available": False, "writer": "自动", "fallback": fallback_text or "暂无有效消息"}
+
+    all_text = "\n".join(str(report.get("content", "")) for report in reports) or "\n".join(all_text_parts)
+    overall, trend, summary = _summarize_funding_overall(all_text)
+    return {
+        "available": True,
+        "writer": "自动",
+        "overall": overall,
+        "rate_trend": trend,
+        "rows": rows,
+        "sentiment_index": _extract_funding_sentiment_index(all_text),
+        "summary": summary,
+        "fallback": fallback_text or "暂无有效消息",
+    }
+
+
 def generate_market_commentary(daily_commentary: dict) -> dict[str, str]:
     """基于日评代表篇生成资金/现券/一级市场分析文字。
 
@@ -1040,12 +1396,15 @@ def collect_all(query_date: str | None = None) -> dict:
     # 数据聚合
     trade_overview = aggregate_trade_overview(instructions)
     trade_count_hourly = aggregate_trade_count_by_hour(instructions)
+    trade_amount_by_direction = aggregate_trade_amount_by_direction(instructions)
     trade_prices = aggregate_trade_prices(instructions)
     emergency_repo = aggregate_emergency_repo(emergency_rows)
     money_market = aggregate_money_market(fund_events, date_str)
     primary_market = aggregate_primary_market(fund_events, date_str)
     risk_warnings = aggregate_risk_warnings(instructions, positions)
     market_commentary = generate_market_commentary(qt_commentary)
+    money_market = enrich_omo_rates_from_commentary(money_market, qt_commentary)
+    funding_market_status = build_funding_market_status(qt_commentary, market_commentary.get("funding", ""))
 
     forecast_repo_rates = repo_rates or external_market.get("repo_rates", {}).get("repo_rates", [])
 
@@ -1064,7 +1423,8 @@ def collect_all(query_date: str | None = None) -> dict:
         # 板块 2：交易笔数（按小时）
         "trade_count_hourly": trade_count_hourly,
 
-        # 01 交易数据汇总：交易金额仍由 O32 分类金额填充，价格数据保留给后续明细扩展
+        # 01 交易数据汇总：交易金额按当日方向分类展示；价格数据保留给后续明细扩展
+        "trade_amount_by_direction": trade_amount_by_direction,
         "trade_prices": trade_prices,
 
         # 02 交收数据汇总
@@ -1076,6 +1436,7 @@ def collect_all(query_date: str | None = None) -> dict:
 
         # 04 资金市场分析
         "money_market": money_market,
+        "funding_market_status": funding_market_status,
 
         # 头寸附录数据，默认不进入主模板流
         "positions": positions,

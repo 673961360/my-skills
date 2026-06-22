@@ -273,6 +273,11 @@
   .metric-table td {
     width: 33.333%;
   }
+  .trade-summary-table th,
+  .trade-summary-table td {
+    font-size: 10px;
+    padding: 5px 6px;
+  }
   .amount-table .amount-col {
     min-width: 76px;
   }
@@ -394,47 +399,60 @@
     <div class="section-title"><span class="icon">01</span> 交易数据汇总</div>
     <div class="template-subtitle">交易数据汇总</div>
 
-    <table class="metric-table">
+    {% if trade_overview.分类明细 %}
+    <table class="trade-summary-table">
       <thead>
         <tr>
-          <th>交易笔数</th>
-          <th>指令金额（万元）</th>
-          <th>成交金额（万元）</th>
+          <th rowspan="2">业务类型</th>
+          <th colspan="2">金额（亿元）</th>
+          <th colspan="2">笔数</th>
+        </tr>
+        <tr>
+          <th>买入</th>
+          <th>卖出</th>
+          <th>买入</th>
+          <th>卖出</th>
         </tr>
       </thead>
       <tbody>
+        {% for key, val in trade_overview.分类明细.items() %}
         <tr>
-          <td><strong>{{ trade_overview.总笔数 }}</strong></td>
-          <td><strong>{{ "%.2f"|format(trade_overview.总指令金额 / 10000) }}</strong></td>
-          <td><strong>{{ "%.2f"|format(trade_overview.总成交金额 / 10000) }}</strong></td>
+          <td>{{ key }}</td>
+          <td class="text-right">{{ "%.2f"|format(val.买入金额 / 100000000) if val.买入金额 else "\\" }}</td>
+          <td class="text-right">{{ "%.2f"|format(val.卖出金额 / 100000000) if val.卖出金额 else "\\" }}</td>
+          <td>{{ val.买入笔数 if val.买入笔数 else "\\" }}</td>
+          <td>{{ val.卖出笔数 if val.卖出笔数 else "\\" }}</td>
         </tr>
+        {% endfor %}
       </tbody>
     </table>
-
-    {% if not trade_overview.分类明细 %}
+    {% else %}
     <div class="empty-data">暂无成交</div>
     {% endif %}
 
     <!-- ══════════════ 交易笔数 ═══════════════ -->
     <div class="template-subtitle">交易笔数</div>
+    {% if trade_count_hourly.total is defined %}
+    <p class="muted-note">今日交易笔数合计{{ trade_count_hourly.total }}笔。</p>
+    {% endif %}
 
     {% if trade_count_hourly and charts.trade_count %}
     <div class="chart-container">
       <img src="data:image/png;base64,{{ charts.trade_count }}" alt="交易笔数图">
     </div>
-    {% elif trade_count_hourly %}
+    {% elif trade_count_hourly.counts is defined %}
     <table>
       <thead>
         <tr>
-          <th>时间</th>
+          <th>交易方向</th>
           <th>笔数</th>
         </tr>
       </thead>
       <tbody>
-        {% for hour, count in trade_count_hourly.items() %}
+        {% for category in trade_count_hourly.categories %}
         <tr>
-          <td>{{ hour }}</td>
-          <td>{{ count }}</td>
+          <td>{{ category }}</td>
+          <td>{{ trade_count_hourly.counts[category] }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -452,10 +470,10 @@
         {% for key, val in trade_overview.分类明细.items() %}
         <tr>
           <td class="text-left">{{ key }}</td>
-          <td>{{ val.笔数 }}</td>
+          <td>{{ val.买入笔数 + val.卖出笔数 }}</td>
           <td>
             {% if trade_overview.总笔数 > 0 %}
-              {{ "%.1f%%"|format(val.笔数 / trade_overview.总笔数 * 100) }}
+              {{ "%.1f%%"|format((val.买入笔数 + val.卖出笔数) / trade_overview.总笔数 * 100) }}
             {% else %}
               —
             {% endif %}
@@ -470,8 +488,11 @@
 
     <!-- ═══════════════ 交易金额 ═══════════════ -->
     <div class="template-subtitle">交易金额</div>
+    {% if trade_amount_by_direction.total is defined %}
+    <p class="muted-note">今日交易金额合计{{ "%.2f"|format(trade_amount_by_direction.total / 100000000) }}亿。</p>
+    {% endif %}
 
-    {% if trade_prices and charts.trade_price %}
+    {% if trade_amount_by_direction.amounts is defined and charts.trade_price %}
     <div class="chart-container">
       <img src="data:image/png;base64,{{ charts.trade_price }}" alt="交易金额图">
     </div>
@@ -482,32 +503,27 @@
       <thead>
         <tr>
           <th>业务分类 · 委托方向</th>
-          <th class="amount-col">指令金额（万元）</th>
-          <th class="amount-col">成交金额（万元）</th>
+          <th class="amount-col">买入金额（亿元）</th>
+          <th class="amount-col">卖出金额（亿元）</th>
           <th>金额占比</th>
-          <th>成交率</th>
+          <th>笔数</th>
         </tr>
       </thead>
       <tbody>
         {% for key, val in trade_overview.分类明细.items() %}
+        {% set row_amount = val.买入金额 + val.卖出金额 %}
         <tr>
           <td class="text-left">{{ key }}</td>
-          <td class="text-right">{{ "%.2f"|format(val.指令金额 / 10000) }}</td>
-          <td class="text-right">{{ "%.2f"|format(val.成交金额 / 10000) }}</td>
+          <td class="text-right">{{ "%.2f"|format(val.买入金额 / 100000000) if val.买入金额 else "\\" }}</td>
+          <td class="text-right">{{ "%.2f"|format(val.卖出金额 / 100000000) if val.卖出金额 else "\\" }}</td>
           <td>
             {% if trade_overview.总指令金额 > 0 %}
-              {{ "%.1f%%"|format(val.指令金额 / trade_overview.总指令金额 * 100) }}
+              {{ "%.1f%%"|format(row_amount / trade_overview.总指令金额 * 100) }}
             {% else %}
               —
             {% endif %}
           </td>
-          <td>
-            {% if val.指令金额 > 0 %}
-              {{ "%.1f%%"|format(val.成交金额 / val.指令金额 * 100) }}
-            {% else %}
-              —
-            {% endif %}
-          </td>
+          <td>{{ val.买入笔数 + val.卖出笔数 }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -522,44 +538,29 @@
   <div class="section">
     <div class="section-title"><span class="icon">02</span> 交收数据汇总</div>
 
-    <div class="template-subtitle">应急回购明细（16:00 后正回购）</div>
+    <div class="template-subtitle">交收数据汇总</div>
 
     {% if emergency_repo.has_data %}
-    <div class="summary-cards">
-      <div class="summary-card">
-        <div class="label">应急回购笔数</div>
-        <div class="value">{{ emergency_repo.总笔数 }}</div>
-      </div>
-      <div class="summary-card">
-        <div class="label">应急回购金额（万元）</div>
-        <div class="value small">{{ "%.2f"|format(emergency_repo.总金额万元) }}</div>
-      </div>
-    </div>
+    <p class="muted-note">今日应急金额为{{ "%.0f"|format(emergency_repo.总金额万元) }}万元</p>
 
     <table>
       <thead>
         <tr>
-          <th>序号</th>
-          <th>产品编号</th>
-          <th>回购金额（万元）</th>
-          <th>期限</th>
-          <th>利率</th>
-          <th>对手方</th>
-          <th>操作时间</th>
-          <th>状态</th>
+          <th>应急产品</th>
+          <th>应急金额（万元）</th>
+          <th>应收业务类型</th>
+          <th>应收交易对手</th>
+          <th>应急原因</th>
         </tr>
       </thead>
       <tbody>
         {% for item in emergency_repo.明细 %}
         <tr>
-          <td>{{ item.序号 }}</td>
-          <td>{{ item.产品编号 }}</td>
-          <td class="text-right">{{ "%.2f"|format(item.回购金额万元) }}</td>
-          <td>{{ item.期限天 }}天</td>
-          <td>{{ item.利率 }}</td>
-          <td>{{ item.对手方 }}</td>
-          <td>{{ item.操作时间 }}</td>
-          <td>{{ item.状态 }}</td>
+          <td>{{ item.应急产品 }}</td>
+          <td class="text-right">{{ "%.0f"|format(item.应急金额万元) }}</td>
+          <td>{{ item.应收业务类型 }}</td>
+          <td>{{ item.应收交易对手 }}</td>
+          <td>{{ item.应急原因 }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -573,40 +574,6 @@
   <!-- ═══════════════ 03 市场预测汇总 ═══════════════ -->
   <div class="section">
     <div class="section-title"><span class="icon">03</span> 市场预测汇总</div>
-
-    {% if repo_rates %}
-    {% if charts.repo_rate %}
-    <div class="chart-container">
-      <img src="data:image/png;base64,{{ charts.repo_rate }}" alt="回购利率图">
-    </div>
-    {% endif %}
-
-    <table>
-      <thead>
-        <tr>
-          <th>品种</th>
-          <th>最新利率（%）</th>
-          <th>最高利率（%）</th>
-          <th>最低利率（%）</th>
-          <th>成交量</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for rate in repo_rates %}
-        <tr>
-          <td><strong>{{ rate.get('SECURITY_NAME', rate.get('SECURITY_CODE', '—')) }}</strong></td>
-          <td>{{ rate.get('LAST_PRICE', rate.get('LATEST_PRICE', '—')) }}</td>
-          <td>{{ rate.get('HIGH_PRICE', '—') }}</td>
-          <td>{{ rate.get('LOW_PRICE', '—') }}</td>
-          <td>{{ rate.get('VOLUME', '—') }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-
-    {% else %}
-    <div class="empty-data">暂无相关数据</div>
-    {% endif %}
 
     <div class="template-subtitle">预测结论</div>
     {% if market_forecast.rows %}
@@ -646,74 +613,30 @@
   <div class="section">
     <div class="section-title"><span class="icon">04</span> 资金市场分析</div>
 
-    <div class="inline-heading">公开市场操作{% if money_market.has_data %}（{{ money_market.data_date }}）{% endif %}</div>
+    <p class="muted-note">填写人：{{ funding_market_status.writer | default("自动") }}</p>
 
-    {% if money_market.has_data %}
-    <div class="summary-cards">
-      <div class="summary-card">
-        <div class="label">OMO 净投放（亿元）</div>
-        <div class="value {% if money_market.omo_net_inject > 0 %}highlight-green{% elif money_market.omo_net_inject < 0 %}highlight-red{% endif %}">
-          {{ "%.2f"|format(money_market.omo_net_inject) }}
-        </div>
-      </div>
-      <div class="summary-card">
-        <div class="label">政府债净缴款（亿元）</div>
-        <div class="value {% if money_market.gov_bond_payment > 0 %}highlight-red{% elif money_market.gov_bond_payment < 0 %}highlight-green{% endif %}">
-          {{ "%.2f"|format(money_market.gov_bond_payment) }}
-        </div>
-      </div>
-    </div>
+    <div class="inline-heading">▶公开市场操作{% if money_market.has_data %}（{{ money_market.data_date }}）{% endif %}</div>
 
-    {% if money_market.omo_operations %}
+    {% if money_market.has_data and money_market.omo_summary_rows %}
     <table>
       <thead>
         <tr>
-          <th>操作类型</th>
-          <th>期限</th>
-          <th>方向</th>
-          <th>金额（亿元）</th>
+          <th>项目</th>
+          <th>规模（亿元）</th>
+          <th>利率</th>
+          <th>到期量（亿元）</th>
+          <th>净投放（亿元）</th>
         </tr>
       </thead>
       <tbody>
-        {% for op in money_market.omo_operations %}
+        {% for op in money_market.omo_summary_rows %}
         <tr>
-          <td class="text-left"><strong>{{ op['操作'] }}</strong></td>
-          <td>{{ op['期限'] }}</td>
-          <td class="{% if op['方向'] == '投放' %}highlight-green{% else %}highlight-orange{% endif %}">{{ op['方向'] }}</td>
-          <td class="text-right">{{ "%.2f"|format(op['金额(亿)']) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div class="empty-data">暂无相关数据</div>
-    {% endif %}
-    {% else %}
-    <div class="empty-data">暂无相关数据</div>
-    {% endif %}
-
-    <div class="inline-heading">债券发行与到期</div>
-
-    {% if money_market.has_data %}
-    {% if money_market.bond_maturities %}
-    <table>
-      <thead>
-        <tr>
-          <th>品种</th>
-          <th>到期金额（亿元）</th>
-          <th>发行金额（亿元）</th>
-          <th>净到期（亿元）</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for bm in money_market.bond_maturities %}
-        {% set net = bm['到期(亿)'] - bm['发行(亿)'] %}
-        <tr>
-          <td class="text-left"><strong>{{ bm['品种'] }}</strong></td>
-          <td class="text-right">{{ "%.2f"|format(bm['到期(亿)']) }}</td>
-          <td class="text-right">{{ "%.2f"|format(bm['发行(亿)']) }}</td>
-          <td class="text-right {% if net > 0 %}highlight-red{% elif net < 0 %}highlight-green{% endif %}">
-            {{ "%.2f"|format(net) }}
+          <td class="text-left"><strong>{{ op['项目'] }}</strong></td>
+          <td class="text-right">{{ "%.2f"|format(op['规模（亿元）']) }}</td>
+          <td>{{ op['利率'] }}</td>
+          <td class="text-right">{{ "%.2f"|format(op['到期量（亿元）']) }}</td>
+          <td class="text-right {% if op['净投放（亿元）'] > 0 %}highlight-green{% elif op['净投放（亿元）'] < 0 %}highlight-red{% endif %}">
+            {{ "%+.2f"|format(op['净投放（亿元）']) }}
           </td>
         </tr>
         {% endfor %}
@@ -722,12 +645,42 @@
     {% else %}
     <div class="empty-data">暂无相关数据</div>
     {% endif %}
-    {% else %}
-    <div class="empty-data">暂无相关数据</div>
-    {% endif %}
 
-    <div class="inline-heading">资金面状况</div>
-    <div class="analysis-box">{{ market_commentary.funding }}</div>
+    <div class="inline-heading">▶资金面状况</div>
+    {% if funding_market_status.available %}
+    <ul>
+      <li><strong>整体状态：</strong>{{ funding_market_status.overall }}</li>
+      <li><strong>利率走势：</strong>{{ funding_market_status.rate_trend }}</li>
+    </ul>
+    <table>
+      <thead>
+        <tr>
+          <th>时段</th>
+          <th>隔夜（押利率/存单）</th>
+          <th>7天（押利率/存单/信用）</th>
+          <th>14天跨月</th>
+          <th>市场状态</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in funding_market_status.rows %}
+        <tr>
+          <td><strong>{{ row['时段'] }}</strong></td>
+          <td>{{ row['隔夜'] }}</td>
+          <td>{{ row['7天'] }}</td>
+          <td>{{ row['14天跨月'] }}</td>
+          <td>{{ row['市场状态'] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <ul>
+      <li><strong>情绪指数：</strong>{{ funding_market_status.sentiment_index }}</li>
+      <li><strong>小结：</strong>{{ funding_market_status.summary }}</li>
+    </ul>
+    {% else %}
+    <div class="analysis-box">{{ funding_market_status.fallback | default(market_commentary.funding) }}</div>
+    {% endif %}
   </div>
 
   <!-- ═══════════════ 现券市场分析 ═══════════════ -->

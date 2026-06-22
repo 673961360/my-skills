@@ -11,11 +11,17 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from data_collector import (
     _fmt_template_date,
+    build_funding_market_status,
+    aggregate_trade_amount_by_direction,
+    aggregate_trade_count_by_hour,
+    aggregate_emergency_repo,
+    aggregate_trade_overview,
     build_equity_market_analysis,
     build_market_forecast,
     build_risk_tips,
     generate_market_commentary,
 )
+from chart_builder import build_all_charts
 from generate_report import render_report
 
 
@@ -65,6 +71,7 @@ def build_sample_data() -> dict:
         "is_trading_day": True,
         "trade_overview": {"总笔数": 0, "总指令金额": 0, "总成交金额": 0, "分类明细": {}},
         "trade_count_hourly": [],
+        "trade_amount_by_direction": {},
         "trade_prices": {},
         "emergency_repo": {"has_data": False, "明细": [], "总笔数": 0, "总金额万元": 0.0},
         "repo_rates": [],
@@ -78,6 +85,7 @@ def build_sample_data() -> dict:
             "reason": "当前预测指标数据源尚未完成映射，暂不生成方向性预测。",
         },
         "money_market": {"has_data": False},
+        "funding_market_status": {"available": False, "writer": "自动", "fallback": "暂无有效消息"},
         "positions": [],
         "risk_warnings": [],
         "market_commentary": {
@@ -109,13 +117,21 @@ def render_trade_sample_report() -> str:
         "总指令金额": 20_000_000,
         "总成交金额": 15_000_000,
         "分类明细": {
-            "回购·融入": {"笔数": 6, "指令金额": 12_000_000, "成交金额": 10_000_000},
-            "现券·买入": {"笔数": 4, "指令金额": 8_000_000, "成交金额": 5_000_000},
+            "现券": {"买入金额": 8_000_000, "卖出金额": 5_000_000, "买入笔数": 4, "卖出笔数": 2},
+            "资金": {"买入金额": 7_000_000, "卖出金额": 0, "买入笔数": 3, "卖出笔数": 0},
+            "权益": {"买入金额": 3_000_000, "卖出金额": 2_000_000, "买入笔数": 2, "卖出笔数": 1},
+            "一级": {"买入金额": 2_000_000, "卖出金额": 0, "买入笔数": 1, "卖出笔数": 0},
         },
     }
     data["trade_prices"] = {
         "R001": {"平均利率": 1.50, "最高利率": 1.70, "最低利率": 1.30, "笔数": 6},
         "R007": {"平均利率": 1.80, "最高利率": 2.00, "最低利率": 1.60, "笔数": 4},
+    }
+    data["trade_amount_by_direction"] = {
+        "total": 20_000_000,
+        "year_total": None,
+        "categories": ["现券买入", "现券卖出", "正回购", "逆回购", "权益买入", "权益卖出", "分销买入", "分销卖出"],
+        "amounts": {"现券买入": 8_000_000, "现券卖出": 5_000_000, "正回购": 7_000_000, "逆回购": 0, "权益买入": 0, "权益卖出": 0, "分销买入": 0, "分销卖出": 0},
     }
     return render_report(data, charts={})
 
@@ -127,11 +143,24 @@ def render_trade_no_chart_hourly_report() -> str:
         "总指令金额": 20_000_000,
         "总成交金额": 15_000_000,
         "分类明细": {
-            "回购·融入": {"笔数": 6, "指令金额": 12_000_000, "成交金额": 10_000_000},
-            "现券·买入": {"笔数": 4, "指令金额": 8_000_000, "成交金额": 5_000_000},
+            "现券": {"买入金额": 8_000_000, "卖出金额": 5_000_000, "买入笔数": 4, "卖出笔数": 2},
+            "资金": {"买入金额": 7_000_000, "卖出金额": 0, "买入笔数": 3, "卖出笔数": 0},
+            "权益": {"买入金额": 3_000_000, "卖出金额": 2_000_000, "买入笔数": 2, "卖出笔数": 1},
+            "一级": {"买入金额": 2_000_000, "卖出金额": 0, "买入笔数": 1, "卖出笔数": 0},
         },
     }
-    data["trade_count_hourly"] = {"09:00": 3, "10:00": 4, "11:00": 3}
+    data["trade_count_hourly"] = {
+        "total": 10,
+        "year_total": None,
+        "categories": ["现券买入", "现券卖出", "正回购", "逆回购", "权益买入", "权益卖出", "分销买入", "分销卖出"],
+        "counts": {"现券买入": 4, "现券卖出": 2, "正回购": 3, "逆回购": 0, "权益买入": 1, "权益卖出": 0, "分销买入": 0, "分销卖出": 0},
+    }
+    data["trade_amount_by_direction"] = {
+        "total": 20_000_000,
+        "year_total": None,
+        "categories": ["现券买入", "现券卖出", "正回购", "逆回购", "权益买入", "权益卖出", "分销买入", "分销卖出"],
+        "amounts": {"现券买入": 8_000_000, "现券卖出": 5_000_000, "正回购": 7_000_000, "逆回购": 0, "权益买入": 0, "权益卖出": 0, "分销买入": 0, "分销卖出": 0},
+    }
     return render_report(data, charts={})
 
 
@@ -142,11 +171,24 @@ def render_trade_chart_sample_report() -> str:
         "总指令金额": 20_000_000,
         "总成交金额": 15_000_000,
         "分类明细": {
-            "回购·融入": {"笔数": 6, "指令金额": 12_000_000, "成交金额": 10_000_000},
-            "现券·买入": {"笔数": 4, "指令金额": 8_000_000, "成交金额": 5_000_000},
+            "现券": {"买入金额": 8_000_000, "卖出金额": 5_000_000, "买入笔数": 4, "卖出笔数": 2},
+            "资金": {"买入金额": 7_000_000, "卖出金额": 0, "买入笔数": 3, "卖出笔数": 0},
+            "权益": {"买入金额": 3_000_000, "卖出金额": 2_000_000, "买入笔数": 2, "卖出笔数": 1},
+            "一级": {"买入金额": 2_000_000, "卖出金额": 0, "买入笔数": 1, "卖出笔数": 0},
         },
     }
-    data["trade_count_hourly"] = {"09:00": 3, "10:00": 4, "11:00": 3}
+    data["trade_count_hourly"] = {
+        "total": 10,
+        "year_total": None,
+        "categories": ["现券买入", "现券卖出", "正回购", "逆回购", "权益买入", "权益卖出", "分销买入", "分销卖出"],
+        "counts": {"现券买入": 4, "现券卖出": 2, "正回购": 3, "逆回购": 0, "权益买入": 1, "权益卖出": 0, "分销买入": 0, "分销卖出": 0},
+    }
+    data["trade_amount_by_direction"] = {
+        "total": 20_000_000,
+        "year_total": None,
+        "categories": ["现券买入", "现券卖出", "正回购", "逆回购", "权益买入", "权益卖出", "分销买入", "分销卖出"],
+        "amounts": {"现券买入": 8_000_000, "现券卖出": 5_000_000, "正回购": 7_000_000, "逆回购": 0, "权益买入": 0, "权益卖出": 0, "分销买入": 0, "分销卖出": 0},
+    }
     data["trade_prices"] = {
         "R001": {"平均利率": 1.50, "最高利率": 1.70, "最低利率": 1.30, "笔数": 6},
         "R007": {"平均利率": 1.80, "最高利率": 2.00, "最低利率": 1.60, "笔数": 4},
@@ -164,12 +206,12 @@ def render_settlement_sample_report() -> str:
     data["emergency_repo"] = {
         "has_data": True,
         "明细": [
-            {"序号": 1, "产品编号": "产品1", "回购金额万元": 2000.0,
-             "期限天": 1, "利率": "R+0BP", "对手方": "上清所",
-             "操作时间": "16:15:30", "状态": "有效"},
-            {"序号": 2, "产品编号": "产品1", "回购金额万元": 3000.0,
-             "期限天": 7, "利率": "2.10", "对手方": "中债登",
-             "操作时间": "16:42:10", "状态": "已下达"},
+            {"序号": 1, "应急产品": "**鼎泰135号(*)", "应急金额万元": 2000.0,
+             "应收业务类型": "正回购到期", "应收交易对手": "上清所",
+             "应急原因": "16点15分未到账"},
+            {"序号": 2, "应急产品": "**创盈6号（*）", "应急金额万元": 3000.0,
+             "应收业务类型": "正回购到期", "应收交易对手": "中债登",
+             "应急原因": "16点42分未到账"},
         ],
         "总笔数": 2,
         "总金额万元": 5000.0,
@@ -280,6 +322,9 @@ def render_money_market_sample_report() -> str:
         "data_date": "2026-06-17",
         "omo_net_inject": 120.0,
         "gov_bond_payment": -35.0,
+        "omo_summary_rows": [
+            {"项目": "7天逆回购", "规模（亿元）": 500.0, "利率": "1.40%", "到期量（亿元）": 380.0, "净投放（亿元）": 120.0},
+        ],
         "omo_operations": [
             {"操作": "7天逆回购", "期限": "7D", "方向": "投放", "金额(亿)": 500.0},
             {"操作": "逆回购到期", "期限": "7D", "方向": "回笼", "金额(亿)": 380.0},
@@ -290,6 +335,20 @@ def render_money_market_sample_report() -> str:
         ],
     }
     data["market_commentary"]["funding"] = "资金面样例短评：隔夜供给平稳，跨月资金价格保持关注。"
+    data["funding_market_status"] = {
+        "available": True,
+        "writer": "自动",
+        "overall": "全日整体呈均衡态势。",
+        "rate_trend": "尾盘稳定在1.45%-1.46%附近。",
+        "rows": [
+            {"时段": "早盘（开盘）", "隔夜": "非银ofr 1.50%-1.51%", "7天": "押利率/存单 1.47%-1.48%", "14天跨月": "1.50%-1.52%", "市场状态": "银行收敛"},
+            {"时段": "午前", "隔夜": "押利率 1.46%-1.48%", "7天": "7d押存单成交 ~1.46%", "14天跨月": "成交寥寥", "市场状态": "均衡"},
+            {"时段": "尾盘", "隔夜": "最低押利率 1.45% / 存单 1.46%", "7天": "—", "14天跨月": "—", "市场状态": "均衡收盘"},
+        ],
+        "sentiment_index": "55 → 50 → 50",
+        "summary": "全天资金面均衡，尾盘稳定。",
+        "fallback": "资金面样例短评：隔夜供给平稳，跨月资金价格保持关注。",
+    }
     return render_report(data, charts={})
 
 
@@ -318,7 +377,7 @@ class TemplateContractTest(unittest.TestCase):
             "交易笔数",
             "交易金额",
             "02 交收数据汇总",
-            "应急回购明细（16:00 后正回购）",
+            "交收数据汇总",
             "03 市场预测汇总",
             "预测结论",
             "04 资金市场分析",
@@ -470,6 +529,44 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("隔夜1.46%", funding)
         self.assertNotIn("http://", funding)
 
+    def test_funding_market_status_extracts_intraday_table_from_qt_reports(self):
+        status = build_funding_market_status(
+            {
+                "reports": [
+                    {
+                        "theme": "资金",
+                        "session": "早评",
+                        "title": "资金早评",
+                        "time": "09:20:00",
+                        "content": "资金面早盘均衡。隔夜ofr 1.50%-1.51%，7天押利率1.47%-1.48%，14天跨月1.50%-1.52%。",
+                    },
+                    {
+                        "theme": "资金",
+                        "session": "午评",
+                        "title": "资金午评",
+                        "time": "11:40:00",
+                        "content": "午前资金面平稳。隔夜押利率1.46%-1.48%，7d押存单成交约1.46%，14天成交寥寥。",
+                    },
+                    {
+                        "theme": "资金",
+                        "session": "日评",
+                        "title": "资金日评",
+                        "time": "16:50:00",
+                        "content": "全天资金面整体均衡。尾盘隔夜最低押利率1.45%，存单1.46%，利率走势稳定。",
+                    },
+                ]
+            },
+            "原始短评",
+        )
+
+        self.assertTrue(status["available"])
+        self.assertEqual("自动", status["writer"])
+        self.assertEqual(["早盘（开盘）", "午前", "尾盘"], [row["时段"] for row in status["rows"]])
+        self.assertIn("隔夜ofr", status["rows"][0]["隔夜"])
+        self.assertIn("7天押利率", status["rows"][0]["7天"])
+        self.assertIn("14天跨月", status["rows"][0]["14天跨月"])
+        self.assertIn("全天资金面整体均衡", status["overall"])
+
     def test_visible_missing_data_uses_contract_fallback_texts(self):
         html = render_sample_report()
         money_detail_html = render_money_market_detail_missing_report()
@@ -562,7 +659,13 @@ class TemplateContractTest(unittest.TestCase):
         html = render_trade_sample_report()
         template = (SCRIPT_DIR / "report_template.html").read_text(encoding="utf-8")
 
-        self.assertIn('<table class="metric-table">', html)
+        self.assertIn('<table class="trade-summary-table">', html)
+        self.assertIn("<th rowspan=\"2\">业务类型</th>", html)
+        self.assertIn("<th colspan=\"2\">金额（亿元）</th>", html)
+        self.assertIn("<td>现券</td>", html)
+        self.assertIn("<td>资金</td>", html)
+        self.assertIn("<td>权益</td>", html)
+        self.assertIn("<td>一级</td>", html)
         self.assertIn("笔数占比", html)
         self.assertIn("金额占比", html)
         self.assertIn('<table class="amount-table">', html)
@@ -570,13 +673,125 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("font-size: 11px", template)
         self.assertIn("padding: 5px 7px", template)
 
+    def test_trade_summary_block_contains_category_amount_rows_before_count_chart(self):
+        html = render_trade_chart_sample_report()
+
+        summary_pos = html.index('<div class="template-subtitle">交易数据汇总</div>')
+        count_pos = html.index('<div class="template-subtitle">交易笔数</div>')
+        summary_html = html[summary_pos:count_pos]
+
+        self.assertIn('<table class="trade-summary-table">', summary_html)
+        self.assertIn("<th rowspan=\"2\">业务类型</th>", summary_html)
+        self.assertIn("<th colspan=\"2\">金额（亿元）</th>", summary_html)
+        self.assertIn("<th colspan=\"2\">笔数</th>", summary_html)
+        self.assertIn("<th>买入</th>", summary_html)
+        self.assertIn("<th>卖出</th>", summary_html)
+        for category in ["现券", "资金", "权益", "一级"]:
+            self.assertIn(f"<td>{category}</td>", summary_html)
+        self.assertNotIn("银行间业务", summary_html)
+        self.assertNotIn("交易所业务", summary_html)
+
+    def test_trade_amount_chart_uses_amount_overview_not_repo_rate_prices(self):
+        data = build_sample_data()
+        data["trade_amount_by_direction"] = {
+            "total": 20_000_000,
+            "year_total": None,
+            "categories": ["现券买入", "现券卖出", "正回购", "逆回购", "权益买入", "权益卖出", "分销买入", "分销卖出"],
+            "amounts": {"现券买入": 8_000_000, "现券卖出": 5_000_000, "正回购": 7_000_000, "逆回购": 0, "权益买入": 0, "权益卖出": 0, "分销买入": 0, "分销卖出": 0},
+        }
+        data["trade_count_hourly"] = {}
+        data["trade_prices"] = {}
+
+        charts = build_all_charts(data)
+
+        self.assertEqual("", charts["trade_count"])
+        self.assertTrue(charts["trade_price"])
+
+    def test_trade_amount_uses_current_day_direction_categories(self):
+        amount_data = aggregate_trade_amount_by_direction([
+            {"委托方向": "债券买入", "指令金额": 100_000_000, "指令状态": "有效指令"},
+            {"委托方向": "债券卖出", "指令金额": 200_000_000, "指令状态": "有效指令"},
+            {"委托方向": "融资回购", "指令金额": 300_000_000, "指令状态": "有效指令"},
+            {"委托方向": "融券回购", "指令金额": 400_000_000, "指令状态": "有效指令"},
+            {"委托方向": "买入", "指令金额": 500_000_000, "指令状态": "有效指令"},
+            {"委托方向": "卖出", "指令金额": 600_000_000, "指令状态": "有效指令"},
+            {"委托方向": "分销买入", "指令金额": 700_000_000, "指令状态": "有效指令"},
+            {"委托方向": "分销卖出", "指令金额": 800_000_000, "指令状态": "有效指令"},
+            {"委托方向": "混合", "指令金额": 900_000_000, "指令状态": "有效指令"},
+            {"委托方向": "买入", "指令金额": 900_000_000, "指令状态": "已撤销"},
+        ])
+
+        self.assertIsNone(amount_data["year_total"])
+        self.assertEqual(3_600_000_000, amount_data["total"])
+        self.assertEqual(100_000_000, amount_data["amounts"]["现券买入"])
+        self.assertEqual(200_000_000, amount_data["amounts"]["现券卖出"])
+        self.assertEqual(300_000_000, amount_data["amounts"]["正回购"])
+        self.assertEqual(400_000_000, amount_data["amounts"]["逆回购"])
+        self.assertEqual(500_000_000, amount_data["amounts"]["权益买入"])
+        self.assertEqual(600_000_000, amount_data["amounts"]["权益卖出"])
+        self.assertEqual(700_000_000, amount_data["amounts"]["分销买入"])
+        self.assertEqual(800_000_000, amount_data["amounts"]["分销卖出"])
+
+    def test_trade_overview_uses_four_fixed_business_types(self):
+        overview = aggregate_trade_overview([
+            {"委托方向": "债券买入", "指令金额": 100_000_000, "指令状态": "有效指令"},
+            {"委托方向": "债券卖出", "指令金额": 200_000_000, "指令状态": "有效指令"},
+            {"委托方向": "融券回购", "指令金额": 300_000_000, "指令状态": "有效指令"},
+            {"委托方向": "融资回购", "指令金额": 400_000_000, "指令状态": "有效指令"},
+            {"委托方向": "买入", "指令金额": 500_000_000, "指令状态": "有效指令"},
+            {"委托方向": "卖出", "指令金额": 600_000_000, "指令状态": "有效指令"},
+            {"委托方向": "分销买入", "指令金额": 700_000_000, "指令状态": "有效指令"},
+            {"委托方向": "分销卖出", "指令金额": 800_000_000, "指令状态": "有效指令"},
+            {"委托方向": "正回购", "指令金额": 900_000_000, "指令状态": "有效指令"},
+            {"委托方向": "债券买入", "指令金额": 900_000_000, "指令状态": "已撤销"},
+        ])
+
+        self.assertEqual(["现券", "资金", "权益", "一级"], list(overview["分类明细"].keys()))
+        self.assertEqual(100_000_000, overview["分类明细"]["现券"]["买入金额"])
+        self.assertEqual(200_000_000, overview["分类明细"]["现券"]["卖出金额"])
+        self.assertEqual(300_000_000, overview["分类明细"]["资金"]["买入金额"])
+        self.assertEqual(400_000_000, overview["分类明细"]["资金"]["卖出金额"])
+        self.assertEqual(500_000_000, overview["分类明细"]["权益"]["买入金额"])
+        self.assertEqual(600_000_000, overview["分类明细"]["权益"]["卖出金额"])
+        self.assertEqual(700_000_000, overview["分类明细"]["一级"]["买入金额"])
+        self.assertEqual(800_000_000, overview["分类明细"]["一级"]["卖出金额"])
+        self.assertEqual(8, overview["总笔数"])
+        self.assertEqual(3_600_000_000, overview["总指令金额"])
+
+    def test_trade_count_uses_current_day_direction_categories(self):
+        count_data = aggregate_trade_count_by_hour([
+            {"委托方向": "债券买入", "指令状态": "有效指令"},
+            {"委托方向": "债券卖出", "指令状态": "有效指令"},
+            {"委托方向": "融资回购", "指令状态": "有效指令"},
+            {"委托方向": "融券回购", "指令状态": "有效指令"},
+            {"委托方向": "买入", "指令状态": "有效指令"},
+            {"委托方向": "卖出", "指令状态": "有效指令"},
+            {"委托方向": "分销买入", "指令状态": "有效指令"},
+            {"委托方向": "分销卖出", "指令状态": "有效指令"},
+            {"委托方向": "混合", "指令状态": "有效指令"},
+            {"委托方向": "买入", "指令状态": "已撤销"},
+        ])
+
+        self.assertEqual(8, count_data["total"])
+        self.assertIsNone(count_data["year_total"])
+        self.assertEqual(1, count_data["counts"]["现券买入"])
+        self.assertEqual(1, count_data["counts"]["现券卖出"])
+        self.assertEqual(1, count_data["counts"]["正回购"])
+        self.assertEqual(1, count_data["counts"]["逆回购"])
+        self.assertEqual(1, count_data["counts"]["权益买入"])
+        self.assertEqual(1, count_data["counts"]["权益卖出"])
+        self.assertEqual(1, count_data["counts"]["分销买入"])
+        self.assertEqual(1, count_data["counts"]["分销卖出"])
+
     def test_trade_section_without_charts_uses_tables_not_empty_images(self):
         html = render_trade_no_chart_hourly_report()
 
         self.assertNotIn('src="data:image/png;base64,"', html)
-        self.assertIn("<th>时间</th>", html)
-        self.assertIn("<td>09:00</td>", html)
-        self.assertIn("<td>3</td>", html)
+        self.assertIn("今日交易笔数合计10笔。", html)
+        self.assertIn("<th>交易方向</th>", html)
+        self.assertIn("<td>现券买入</td>", html)
+        self.assertIn("<td>4</td>", html)
+        self.assertNotIn("2026年以来", html)
 
     def test_trade_section_chart_order_matches_reference_unit(self):
         html = render_trade_chart_sample_report()
@@ -604,18 +819,36 @@ class TemplateContractTest(unittest.TestCase):
         forecast_pos = html.index('<span class="icon">03</span> 市场预测汇总')
         settlement_html = html[settlement_pos:forecast_pos]
 
-        self.assertIn("应急回购笔数", settlement_html)
-        self.assertIn("应急回购金额（万元）", settlement_html)
-        self.assertIn("<th>产品编号</th>", settlement_html)
-        self.assertIn("<td>产品1</td>", settlement_html)
-        self.assertIn("16:15:30", settlement_html)
+        self.assertIn("今日应急金额为5000万元", settlement_html)
+        self.assertIn("<th>应急产品</th>", settlement_html)
+        self.assertIn("<th>应急金额（万元）</th>", settlement_html)
+        self.assertIn("<th>应收业务类型</th>", settlement_html)
+        self.assertIn("<th>应收交易对手</th>", settlement_html)
+        self.assertIn("<th>应急原因</th>", settlement_html)
+        self.assertIn("<td>**鼎泰135号(*)</td>", settlement_html)
+        self.assertNotIn("<td>产品1</td>", settlement_html)
+        self.assertNotIn("创金", settlement_html)
+        self.assertNotIn("合信", settlement_html)
+        self.assertNotIn("中国银行上海", settlement_html)
+        self.assertIn("16点15分未到账", settlement_html)
         self.assertIn("上清所", settlement_html)
         self.assertNotIn("SETTLEMENT_CHART_SHOULD_NOT_RENDER", settlement_html)
         self.assertNotIn("交收进度分布图", settlement_html)
-        # 脱敏：真实产品代码/名称不得出现在 02 板块
-        self.assertNotIn("003749", settlement_html)
-        self.assertNotIn("创金", settlement_html)
-        self.assertNotIn("合信", settlement_html)
+
+    def test_emergency_repo_masks_product_names_without_generic_numbering(self):
+        repo = aggregate_emergency_repo([
+            {
+                "productName": "创金合信鼎泰135号(中国银行上海)",
+                "repurAmt": "180000000",
+                "sideCodeText": "正回购",
+                "rivalName": "中信信托日享套利1号",
+                "repoInsDirectTimeText": "交易员 2026-06-22 16:43:12",
+            }
+        ])
+
+        self.assertEqual("**鼎泰135号(*)", repo["明细"][0]["应急产品"])
+        self.assertNotEqual("产品1", repo["明细"][0]["应急产品"])
+        self.assertEqual("16点43分未到账", repo["明细"][0]["应急原因"])
 
     def test_forecast_section_contains_rates_and_prediction_contract(self):
         html = render_forecast_sample_report()
@@ -624,9 +857,10 @@ class TemplateContractTest(unittest.TestCase):
         money_pos = html.index('<span class="icon">04</span> 资金市场分析')
         forecast_html = html[forecast_pos:money_pos]
 
-        self.assertIn("REPO_RATE_CHART", forecast_html)
-        self.assertIn('alt="回购利率图"', forecast_html)
-        self.assertIn("<td><strong>R001</strong></td>", forecast_html)
+        self.assertNotIn("REPO_RATE_CHART", forecast_html)
+        self.assertNotIn('alt="回购利率图"', forecast_html)
+        self.assertNotIn("<td><strong>R001</strong></td>", forecast_html)
+        self.assertNotIn("最新利率（%）", forecast_html)
         self.assertIn("预测结论", forecast_html)
         self.assertIn("资产类型", forecast_html)
         self.assertIn("明日预测点位区间", forecast_html)
@@ -754,9 +988,10 @@ class TemplateContractTest(unittest.TestCase):
         funding_pos = html.index('<span class="icon">04</span> 资金市场分析')
         bond_pos = html.index("现券市场分析")
         segment = html[funding_pos:bond_pos]
-        self.assertIn("公开市场操作", segment)
-        self.assertIn("债券发行与到期", segment)
-        self.assertIn("资金面状况", segment)
+        self.assertIn("填写人：自动", segment)
+        self.assertIn("▶公开市场操作", segment)
+        self.assertIn("▶资金面状况", segment)
+        self.assertNotIn("债券发行与到期", segment)
         self.assertIn("暂无相关数据", segment)
 
     def test_funding_market_section_renders_data_inside_single_unit(self):
@@ -767,14 +1002,21 @@ class TemplateContractTest(unittest.TestCase):
         bond_pos = html.index("现券市场分析")
         segment = html[section_pos:bond_pos]
 
-        self.assertIn("公开市场操作（2026-06-17）", segment)
-        self.assertIn("OMO 净投放（亿元）", segment)
-        self.assertIn("政府债净缴款（亿元）", segment)
-        self.assertIn("<td>7D</td>", segment)
-        self.assertIn("债券发行与到期", segment)
-        self.assertIn("<strong>国债</strong>", segment)
-        self.assertIn("资金面状况", segment)
-        self.assertIn("资金面样例短评", segment)
+        self.assertIn("填写人：自动", segment)
+        self.assertIn("▶公开市场操作（2026-06-17）", segment)
+        self.assertIn("规模（亿元）", segment)
+        self.assertIn("到期量（亿元）", segment)
+        self.assertIn("净投放（亿元）", segment)
+        self.assertIn("<strong>7天逆回购</strong>", segment)
+        self.assertIn("+120.00", segment)
+        self.assertNotIn("债券发行与到期", segment)
+        self.assertIn("▶资金面状况", segment)
+        self.assertIn("整体状态：", segment)
+        self.assertIn("隔夜（押利率/存单）", segment)
+        self.assertIn("7天（押利率/存单/信用）", segment)
+        self.assertIn("14天跨月", segment)
+        self.assertIn("情绪指数：", segment)
+        self.assertIn("小结：", segment)
         self.assertEqual(1, segment.count('<div class="section">'))
 
     def test_bond_market_section_renders_commentary_or_fallback(self):

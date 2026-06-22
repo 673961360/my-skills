@@ -63,73 +63,98 @@ def _fig_to_base64(fig: plt.Figure) -> str:
 # ──────────────────────────────────────────────
 
 
-def build_trade_count_chart(hourly_data: dict) -> str:
-    """生成交易笔数按小时分布柱状图。
+def build_trade_count_chart(count_data: dict) -> str:
+    """生成当日交易笔数分类柱状图。
 
     Args:
-        hourly_data: aggregate_trade_count_by_hour 返回的 dict
+        count_data: aggregate_trade_count_by_hour 返回的 dict
     """
-    if not hourly_data:
+    if not count_data:
         return ""
 
-    hours = list(hourly_data.keys())
-    counts = list(hourly_data.values())
+    categories = count_data.get("categories", [])
+    counts_by_category = count_data.get("counts", {})
+    categories = [category for category in categories if counts_by_category.get(category, 0)]
+    if not categories:
+        return ""
+    counts = [counts_by_category[category] for category in categories]
 
-    fig, ax = plt.subplots(figsize=(10, 4))
+    fig, ax = plt.subplots(figsize=(10, 4.8))
 
-    bars = ax.bar(hours, counts, color="#4472C4", edgecolor="white", width=0.6)
+    colors = {
+        "现券买入": "#76b7e5",
+        "现券卖出": "#2f73c9",
+        "正回购": "#61d1d4",
+        "逆回购": "#94e2de",
+        "权益买入": "#d9473f",
+        "权益卖出": "#c51f28",
+        "分销买入": "#f2a13a",
+        "分销卖出": "#f6c56f",
+    }
+    bars = ax.bar(categories, counts, color=[colors.get(category, "#4472C4") for category in categories], edgecolor="white", width=0.62)
 
     # 在柱子上方显示数值
     for bar, count in zip(bars, counts):
         ax.text(
             bar.get_x() + bar.get_width() / 2,
-            bar.get_height() + 0.3,
+            bar.get_height() + max(counts) * 0.015,
             str(count),
             ha="center",
             va="bottom",
-            fontsize=9,
+            fontsize=8,
         )
 
-    ax.set_xlabel("时间", fontsize=11)
+    ax.set_xlabel("交易方向", fontsize=11)
     ax.set_ylabel("笔数", fontsize=11)
-    ax.set_title("交易笔数（按小时）", fontsize=13, fontweight="bold", pad=10)
+    ax.set_title("交易笔数（当日分类）", fontsize=13, fontweight="bold", pad=10)
+    ax.tick_params(axis="x", labelrotation=28, labelsize=9)
     ax.grid(axis="y", alpha=0.3)
     ax.set_ylim(0, max(counts) * 1.3 if counts else 10)
     fig.tight_layout()
     return _fig_to_base64(fig)
 
 
-def build_trade_price_chart(prices: dict) -> str:
-    """生成交易价格（利率）折线图。
-
-    Args:
-        prices: aggregate_trade_prices 返回的 dict
-    """
-    if not prices:
+def build_trade_amount_chart(amount_data: dict) -> str:
+    """生成当日交易金额分类柱状图。"""
+    if not amount_data:
         return ""
 
-    fig, ax = plt.subplots(figsize=(10, 4))
+    categories = amount_data.get("categories", [])
+    amounts_by_category = amount_data.get("amounts", {})
+    categories = [category for category in categories if amounts_by_category.get(category, 0)]
+    if not categories:
+        return ""
+    amounts = [amounts_by_category[category] / 100000000 for category in categories]
 
-    labels = list(prices.keys())
-    avg_rates = [v["平均利率"] for v in prices.values()]
-    max_rates = [v["最高利率"] for v in prices.values()]
-    min_rates = [v["最低利率"] for v in prices.values()]
+    fig, ax = plt.subplots(figsize=(10, 4.8))
+    colors = {
+        "现券买入": "#76b7e5",
+        "现券卖出": "#2f73c9",
+        "正回购": "#61d1d4",
+        "逆回购": "#94e2de",
+        "权益买入": "#d9473f",
+        "权益卖出": "#c51f28",
+        "分销买入": "#f2a13a",
+        "分销卖出": "#f6c56f",
+    }
+    bars = ax.bar(categories, amounts, color=[colors.get(category, "#4472C4") for category in categories], edgecolor="white", width=0.62)
 
-    x = range(len(labels))
+    for bar, amount in zip(bars, amounts):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + max(amounts) * 0.015,
+            f"{amount:.2f}",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+        )
 
-    ax.plot(x, avg_rates, "o-", color="#4472C4", label="平均利率", linewidth=2, markersize=8)
-    ax.plot(x, max_rates, "s--", color="#ED7D31", label="最高利率", linewidth=1.5, markersize=6)
-    ax.plot(x, min_rates, "^--", color="#70AD47", label="最低利率", linewidth=1.5, markersize=6)
-
-    # 填充区间
-    ax.fill_between(x, min_rates, max_rates, alpha=0.1, color="#4472C4")
-
-    ax.set_xticks(x)
-    ax.set_xticklabels(labels, fontsize=11)
-    ax.set_ylabel("利率（%）", fontsize=11)
-    ax.set_title("当日回购利率分布", fontsize=13, fontweight="bold", pad=10)
-    ax.legend(loc="best", fontsize=10)
-    ax.grid(alpha=0.3)
+    ax.set_xlabel("交易方向", fontsize=11)
+    ax.set_ylabel("金额（亿元）", fontsize=11)
+    ax.set_title("交易金额（当日分类）", fontsize=13, fontweight="bold", pad=10)
+    ax.tick_params(axis="x", labelrotation=28, labelsize=9)
+    ax.grid(axis="y", alpha=0.3)
+    ax.set_ylim(0, max(amounts) * 1.3 if amounts else 1)
     fig.tight_layout()
     return _fig_to_base64(fig)
 
@@ -205,9 +230,8 @@ def build_all_charts(data: dict) -> dict:
     hourly = data.get("trade_count_hourly", {})
     charts["trade_count"] = build_trade_count_chart(hourly)
 
-    # 01 交易金额/利率折线图
-    prices = data.get("trade_prices", {})
-    charts["trade_price"] = build_trade_price_chart(prices)
+    # 01 交易金额图
+    charts["trade_price"] = build_trade_amount_chart(data.get("trade_amount_by_direction", {}))
 
     # 03 市场预测汇总回购利率图
     repo_rates = data.get("_repo_rates", [])
