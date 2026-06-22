@@ -97,17 +97,21 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--output", type=str, default=None, help="输出路径（默认 output/全部数据_YYYYMMDD.xlsx）")
     p.add_argument("--env", type=str, default="prod",
                    choices=["test", "prod"], help="目标环境（默认 prod）")
+    p.add_argument("--use-cache", action="store_true", default=False,
+                   help="使用缓存的 API 响应（调试模式）")
     return p.parse_args()
 
 
 def main():
     args = parse_args()
     os.environ["DTR_ENV"] = args.env
+    if args.use_cache:
+        os.environ["DTR_USE_CACHE"] = "true"
 
     query_date = _parse_date(args.date)
     display_date = _fmt_display_date(query_date)
 
-    print(f"日期: {display_date}  环境: {args.env}")
+    print(f"日期: {display_date}  环境: {args.env}  缓存: {'ON' if args.use_cache else 'OFF'}")
     print("采集数据...")
     data = collect_all(query_date)
 

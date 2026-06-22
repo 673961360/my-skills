@@ -18,6 +18,24 @@ uv run python generate_report.py --date {YYYYMMDD}
 cd scripts && uv sync
 ```
 
+## 缓存调试
+
+调试时不想每次等 API 实时采集（30-60 秒），可启用缓存：
+
+```bash
+# 首次：不带缓存跑一次，自动写入 cache/
+uv run python scripts/generate_report.py --env prod
+
+# 后续调试：用缓存秒启动（6 秒）
+uv run python scripts/generate_report.py --env prod --use-cache
+uv run python scripts/export_data.py --use-cache
+```
+
+- 开关：`--use-cache` 或环境变量 `DTR_USE_CACHE=true`
+- 缓存目录：`cache/`（已 gitignore）
+- **只缓存 AI Gateway API 响应**，Oracle QT 和外部行情仍实时请求
+- 参数变了（如换日期）会自动调 API 补缓存
+
 ## 环境依赖
 
 | 依赖 | 说明 |

@@ -2,9 +2,19 @@
 
 所有请求通过 Authorization: Bearer {api_key} 认证，
 网关自动注入 userId 和 sysToken，调用方无需手动传递。
+
+缓存：
+- 设置 DTR_USE_CACHE=true 启用缓存模式
+- 缓存文件存于 skill 根目录 cache/ 下
+- key = {api_id}_{params_hash}.json
+- 命中即读缓存，未命中调 API 后写入
 """
 
+import hashlib
+import json
+import os
 import time
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -13,6 +23,49 @@ from config_loader import load_config
 
 # 模块级配置缓存
 _config: dict | None = None
+_cache_dir: Path | None = None
+
+
+def _is_cache_enabled() -> bool:
+    """缓存开关：环境变量 DTR_USE_CACHE=true 时启用。"""
+    return os.getenv("DTR_USE_CACHE", "").strip().lower() == "true"
+
+
+def _get_cache_dir() -> Path:
+    """缓存目录（惰性创建）。"""
+    global _cache_dir
+    if _cache_dir is None:
+        _cache_dir = Path(__file__).resolve().parent.parent / "cache"
+    if _is_cache_enabled():
+        _cache_dir.mkdir(parents=True, exist_ok=True)
+    return _cache_dir
+
+
+def _cache_key(api_id: str, params: dict | None) -> str:
+    """生成缓存文件名。"""
+    raw = json.dumps({"api_id": api_id, "params": params or {}}, sort_keys=True, ensure_ascii=False)
+    h = hashlib.sha256(raw.encode()).hexdigest()[:16]
+    return f"{api_id}_{h}.json"
+
+
+def _read_cache(api_id: str, params: dict | None) -> dict | None:
+    """读缓存，未命中返回 None。"""
+    if not _is_cache_enabled():
+        return None
+    path = _get_cache_dir() / _cache_key(api_id, params)
+    if path.exists():
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
+
+def _write_cache(api_id: str, params: dict | None, data: dict) -> None:
+    """写缓存。"""
+    if not _is_cache_enabled():
+        return
+    path = _get_cache_dir() / _cache_key(api_id, params)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, default=str)
 
 
 def get_config() -> dict:
@@ -45,6 +98,11 @@ def call_sql_api(api_id: str, params: dict[str, Any] | None = None) -> dict:
     Returns:
         API 响应的 JSON dict
     """
+    # 缓存命中直接返回
+    cached = _read_cache(api_id, params)
+    if cached is not None:
+        return cached
+
     cfg = get_config()
     url = f"{cfg['api_base_url']}/admin/dataquery/execute/{api_id}"
     body = params or {}
@@ -66,6 +124,7 @@ def call_sql_api(api_id: str, params: dict[str, Any] | None = None) -> dict:
                     f"API {api_id} 返回错误: code={result.get('code')}, "
                     f"message={result.get('message')}"
                 )
+            _write_cache(api_id, params, result)
             return result
         except requests.RequestException as e:
             if attempt < max_retries:
@@ -95,6 +154,11 @@ def call_api(
     Returns:
         API 响应的 JSON dict
     """
+    # 缓存命中直接返回
+    cached = _read_cache(api_id, params)
+    if cached is not None:
+        return cached
+
     cfg = get_config()
     url = f"{cfg['api_base_url']}/admin/apiquery/proxy/{api_id}"
     max_retries = cfg.get("api_max_retries", 3)
@@ -117,7 +181,9 @@ def call_api(
                     timeout=timeout,
                 )
             resp.raise_for_status()
-            return resp.json()
+            result = resp.json()
+            _write_cache(api_id, params, result)
+            return result
         except requests.RequestException as e:
             if attempt < max_retries:
                 time.sleep(1 * attempt)

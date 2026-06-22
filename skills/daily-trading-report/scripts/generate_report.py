@@ -115,6 +115,12 @@ def parse_args() -> argparse.Namespace:
         choices=["test", "prod"],
         help="目标环境：test（默认）/ prod；也可用环境变量 DTR_ENV 指定",
     )
+    parser.add_argument(
+        "--use-cache",
+        action="store_true",
+        default=False,
+        help="使用缓存的 API 响应（调试模式，跳过实时采集）",
+    )
     return parser.parse_args()
 
 
@@ -124,6 +130,11 @@ def main():
 
     # 设定目标环境（供 api_client / db_client 的配置加载读取）
     os.environ["DTR_ENV"] = args.env
+
+    # 缓存模式
+    if args.use_cache:
+        os.environ["DTR_USE_CACHE"] = "true"
+        print(f"  🗄️  缓存模式：ON（跳过实时 API 调用）")
 
     # 确定日期
     query_date = _parse_date(args.date)

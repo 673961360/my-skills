@@ -1,6 +1,9 @@
 # 日报输出文件（不纳入版本控制）
 reports/*.html
 
+# API 响应缓存
+cache/
+
 # Python 缓存
 __pycache__/
 *.pyc
