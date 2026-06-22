@@ -1,6 +1,8 @@
 # 字段映射与数据缺口
 
 > 查表参考：字段含义、栏目映射、分类关键词、数据缺口。按 CLAUDE.md「文档卫生」，查表参考归本文件，操作/口径/踩坑归 `rules.md`。
+>
+> **与 `data-sources.md` 的边界**：板块主线数据血缘（每板块"数据源→采集→加工→脱敏→降级→呈现"）归 `data-sources.md`（稳定参考，不随缺口清除）；本文件聚焦**字段级映射 + 活跃缺口**（缺口解决后按 R2 清除）。
 
 ## O32 字段 → 日报栏目映射
 
@@ -44,8 +46,8 @@
 | 用途 | 「02 交收数据汇总」应急回购明细 |
 | 请求参数 | `{"rows":2000,"page":1,"rivalIdList":[],"inqResStatusList":[1,3,9],"sideCodeList":["7"]}`（服务端不支持按日期/opTime 过滤） |
 | 响应结构 | `data._embedded.vos[].inqResultMgrQueryInfos[]`（两层嵌套，**非** `data.body.rows`） |
-| 应急判定 | 当日（`opDate` == query_date）且指令下达时间 `repoInsDirectTimeText` 时间部分 ≥ "16:00"（**不用 `opTime`**，客户端筛） |
-| 脱敏 | 按 `productId` 出现顺序编号「产品1、产品2…」（同产品同号），由 `aggregate_emergency_repo` 生成；02 展示不出现真实代码/名称 |
+| 应急判定 | 当日（`opDate` == query_date）且指令下达时间 `repoInsDirectTimeText` 时间部分 ≥ "16:30"（**不用 `opTime`**，客户端筛） |
+| 脱敏 | 产品名称走 `mask_product_name`（`desensitize.py`：创金/合信→`*`；括号内容闭合 `(x)`→`(*)`、未闭合→`*`），由 `aggregate_emergency_repo` 逐行脱敏；02 展示不出现真实代码/名称 |
 
 ### 字段映射（0008 → 02 板块）
 
@@ -158,7 +160,7 @@ SQL `日评/早评/午评` 召回 → CONTENT 原文去重 → 标题分主题 �
 |------|-----------|---------|
 | 资金市场分析 | `prompts/funding-commentary.md` | QT 资金日评原文 dump |
 | 现券市场分析 | `prompts/bond-commentary.md` | QT 现券日评原文 dump |
-| 一级市场分析 | `prompts/primary-commentary.md` | 资金日评「一级简评」小节（嵌入）或降级 |
+| 一级市场分析 | —（脚本自动，无 prompt） | 0013 发行数据 → 发行卡+明细表（见 `data-sources.md`） |
 | 权益市场分析 | `prompts/stock-commentary.md` | WebSearch A 股收盘数据 |
 
 原 `categorize_messages` 全表关键词匹配（误把报价当短评）已移除。
@@ -171,10 +173,11 @@ SQL `日评/早评/午评` 召回 → CONTENT 原文去重 → 标题分主题 �
 
 | 栏目 | 数据源 | 获取方式 | 降级规则 |
 |------|--------|---------|---------|
-| 权益市场分析 | WebSearch | 交易日 15:30 后搜索"A 股市场总结" | "外部短评暂未获取" |
+| 权益市场分析 | WebSearch（域名限定优先） | 见 `prompts/stock-commentary.md`；指数点位引用脚本表格，文字补成交额/板块/驱动 | 搜不到当日时不复述表格，降级标注"待盘后更新" |
 | 市场预测汇总 · 资金面判断 | QT 资金短评 / WebSearch 资金面短评 | 17 点休市后读取资金面短评，抽取 `不松`、`偏紧`、`偏松`、`均衡` 等情绪判断 | 无短评时显示 `暂无有效消息`，不使用数值利率替代情绪 |
 | 市场预测汇总 · OMO | `cat_sql_trade_0013` | 资金事件日历内 OMO 净投放、投放/到期明细、政府债缴款 | API 不可用时不生成该扰动指标 |
 | 市场预测汇总 · 收益率曲线 | 中国货币网「债券收盘收益率曲线」 | `https://www.chinamoney.com.cn/chinese/bkcurvclosedy/`；国债、政策性金融债等曲线，每个工作日公布 | 抓取失败时现券预测仅使用 QT 现券情绪和资金面评分，并标注低置信度 |
+| 市场预测汇总 · 回购利率 | `cat_sql_trade_0012`（主）/ 中国货币网货币市场行情 `prr-md.json`（降级） | 主源抓 R001/007/014、DR001/007/014；主源失败切货币网静态 JSON（`collect_chinamoney_repo_rates`） | 两者均失败时预测表利率指标行降级 |
 | 市场预测汇总 · 权益指数 | 新浪财经（主源）+ 腾讯财经（备源） | `https://hq.sinajs.cn/list=sh000001,sz399001,sz399006,sh000688`；双源自动切换，4 指数（上证/深证/创业板/科创50） | 双源均失败时权益预测行显示 `暂无相关数据` |
 | 市场预测汇总 · 一级 CD | 待确定 | 需确定 1Y 大行 CD 发行利率和二级利差可用来源；当前仅从一级发行短评中尝试抽取 | 无短评或无可解析数值时显示 `暂无相关数据` |
 | 一级市场分析 | 资金事件日历 cat_sql_trade_0013 发行与到期·发行方向 | `aggregate_primary_market()` > `primary_market` | "暂无相关数据"（当日无发行时） |

@@ -53,11 +53,16 @@ uv run python scripts/export_data.py --use-cache
 2. **运行脚本**：`uv run python generate_report.py --date YYYYMMDD`
 3. **Claude 注入短评（必须执行，不可跳过）**：
    脚本输出的 HTML 中现券/权益栏为占位文本。Claude 必须通过 WebSearch 获取当日市场信息并注入：
-   - **现券市场分析**：若 QT 有现券日评则优先使用；若 QT 无现券日评（如今天只有午评），则 WebSearch "YYYY年M月D日 债券市场 利率债 收盘" 获取国债期货/现券收益率/资金面/机构观点，整合为 3-5 句专业评述
-   - **权益市场分析**：WebSearch "YYYY年M月D日 A股市场收盘总结" 获取主要指数涨跌/成交额/领涨领跌板块/市场驱动因素，整合为 3-5 句专业评述
+   - **现券市场分析**：QT 现券日评原文 dump 由脚本填入（**中间态**），按 `prompts/bond-commentary.md` 精炼为 3-5 句，剔除 OMO/资金面/一级（他栏已有）；QT 无现券日评才 WebSearch "YYYY年M月D日 债券 利率债 收盘"
+   - **权益市场分析**：按 `prompts/stock-commentary.md` 的查询策略（域名限定优先，非精确日期长句）WebSearch 当日 A 股收盘，整合为成交额/板块/驱动的**增量判断**（指数点位引用上方表格，不复述）
    - **资金市场分析**：QT 资金日评原文 dump 已由脚本填入，按 `prompts/funding-commentary.md` 精炼为 3-5 句判断性总结（若模板已含 QT 原文则无需额外搜索）
-   - **一级市场分析**：发行数据已由脚本自动填充，若资金日评「一级简评」有内容则补充精炼
+   - **一级市场分析**：发行卡 + 明细表由脚本自动填充（`aggregate_primary_market`），**无需精炼**
    - 注入方式：直接 `Edit` HTML 文件替换占位文本
+   - **注入后逐栏检查（中间态→成品，每栏必过）**：
+     - [ ] 资金面状况：是原文 dump（非表格）→ 按 `prompts/funding-commentary.md` 精炼；已是时段表 → 过
+     - [ ] 现券市场分析：不得留 QT 原文 dump（含日评标题/逐条成交/OMO/Shibor/一级）→ 按 `prompts/bond-commentary.md` 精炼
+     - [ ] 权益市场分析：不得是"外部短评暂未获取"，也不得复述指数表点位 → 按 `prompts/stock-commentary.md` 补成交额/板块/驱动
+     - [ ] 一级市场分析：脚本自动（卡片+明细表）→ 过
 4. **检查结果**：
    - 成功 → 读取 HTML，向用户展示摘要
    - 失败 → 根据错误信息排查（见下方错误表）

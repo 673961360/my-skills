@@ -262,14 +262,12 @@ def render_primary_market_available_report() -> str:
     data["primary_market"] = {
         "available": True,
         "data_date": "2026-06-22",
-        "summary": "一级市场发行情况结构化摘要样例。",
         "totals": {"利率债": 260, "地方债": 235, "NCD": 0},
         "structure_detail": [
             {"品种": "国债", "期限": "10Y", "金额(亿)": 90.00},
             {"品种": "政金债", "期限": "5Y", "金额(亿)": 70.00},
             {"品种": "地方债", "期限": "30Y", "金额(亿)": 50.50},
         ],
-        "structure_summary": "发行结构分析结构化摘要样例。",
     }
     return render_report(data, charts={})
 
@@ -345,7 +343,6 @@ def render_money_market_sample_report() -> str:
             {"时段": "午前", "隔夜": "押利率 1.46%-1.48%", "7天": "7d押存单成交 ~1.46%", "14天跨月": "成交寥寥", "市场状态": "均衡"},
             {"时段": "尾盘", "隔夜": "最低押利率 1.45% / 存单 1.46%", "7天": "—", "14天跨月": "—", "市场状态": "均衡收盘"},
         ],
-        "sentiment_index": "55 → 50 → 50",
         "summary": "全天资金面均衡，尾盘稳定。",
         "fallback": "资金面样例短评：隔夜供给平稳，跨月资金价格保持关注。",
     }
@@ -896,9 +893,7 @@ class TemplateContractTest(unittest.TestCase):
         primary_html = html[primary_start:primary_end]
 
         self.assertIn("发行情况", primary_html)
-        self.assertIn("一级市场发行情况结构化摘要样例。", primary_html)
         self.assertIn("发行结构分析", primary_html)
-        self.assertIn("发行结构分析结构化摘要样例。", primary_html)
         self.assertNotIn("待接入", primary_html)
         # 新结构：汇总卡片 + 明细表
         self.assertIn("利率债发行", primary_html)
@@ -931,9 +926,7 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("暂无相关数据", fallback_segment)
         self.assertIn("一级发行样例消息一", qt_segment)
         self.assertIn("发行结构分析", qt_segment)
-        self.assertIn("一级市场发行情况结构化摘要样例。", available_segment)
         self.assertIn("利率债发行", available_segment)  # 汇总卡片
-        self.assertIn("发行结构分析结构化摘要样例。", available_segment)
         self.assertEqual(1, available_segment.count('<div class="section">'))
 
     def test_risk_tips_section_renders_numbered_list_as_final_unit(self):
@@ -1015,7 +1008,6 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("隔夜（押利率/存单）", segment)
         self.assertIn("7天（押利率/存单/信用）", segment)
         self.assertIn("14天跨月", segment)
-        self.assertIn("情绪指数：", segment)
         self.assertIn("小结：", segment)
         self.assertEqual(1, segment.count('<div class="section">'))
 

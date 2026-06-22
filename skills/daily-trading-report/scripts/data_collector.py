@@ -455,7 +455,7 @@ def collect_emergency_repo(query_date: str) -> list[dict]:
     return [
         r for r in rows
         if r.get("opDate") == query_date
-        and _direct_time_hhmmss(r.get("repoInsDirectTimeText", ""))[:5] >= "16:00"
+        and _direct_time_hhmmss(r.get("repoInsDirectTimeText", ""))[:5] >= "16:30"
     ]
 
 
@@ -478,30 +478,6 @@ def collect_fund_events(begin_date: str, end_date: str) -> list[dict]:
         "endDate": int(end_date),
     })
     return result.get("body", [])
-
-
-def collect_rival_info(last_rival_id: int = 0) -> list[dict]:
-    """采集对手基本信息（cat_sql_trade_0005）。"""
-    result = call_sql_api("cat_sql_trade_0005", {"lastRivalId": str(last_rival_id)})
-    return result.get("body", [])
-
-
-def collect_position_forecast(end_date: str) -> list[dict]:
-    """采集头寸预测（cat_api_trade_0022）。"""
-    result = call_form_api("cat_api_trade_0022", {
-        "fundList": "",
-        "page": 1,
-        "size": 2000,
-        "endDate": end_date,
-        "containTreatConfirmApply": 0,
-        "containConfirmedRedeemFundBal": 0,
-        "productLevel": 0,
-        "managerLevel": 0,
-        "positionStatus": "",
-        "positionFlatDays": -1,
-    })
-    body = result.get("data", {}).get("body", {})
-    return body.get("rows", [])
 
 
 def is_trading_day(query_date: str, calendar_data: list[dict] | None = None) -> bool:
@@ -546,9 +522,10 @@ def aggregate_trade_overview(instructions: list[dict]) -> dict:
         return None
 
     def classify_side(direction: str) -> str | None:
-        if direction in {"买入", "债券买入", "分销买入", "融券回购"}:
+        # 融资回购=正回购(融入资金)→买入；融券回购=逆回购(融出资金)→卖出
+        if direction in {"买入", "债券买入", "分销买入", "融资回购"}:
             return "买入"
-        if direction in {"卖出", "债券卖出", "分销卖出", "融资回购"}:
+        if direction in {"卖出", "债券卖出", "分销卖出", "融券回购"}:
             return "卖出"
         return None
 
@@ -563,6 +540,9 @@ def aggregate_trade_overview(instructions: list[dict]) -> dict:
         category = classify_trade(direction)
         side = classify_side(direction)
         if category is None or side is None:
+            continue
+        # 资金类(回购)仅统计银行间，对齐交易员手工口径
+        if category == "资金" and str(inst.get("市场", "")) != "银行间":
             continue
 
         overview[category][f"{side}笔数"] += 1
@@ -594,6 +574,9 @@ def aggregate_trade_count_by_hour(instructions: list[dict]) -> dict:
             continue
         bucket = _trade_count_bucket(str(inst.get("委托方向", "")))
         if bucket:
+            # 回购(正/逆)仅统计银行间，对齐交易员手工口径
+            if bucket in {"正回购", "逆回购"} and str(inst.get("市场", "")) != "银行间":
+                continue
             total += 1
             counts[bucket] += 1
 
@@ -633,6 +616,9 @@ def aggregate_trade_amount_by_direction(instructions: list[dict]) -> dict:
             continue
         bucket = _trade_count_bucket(str(inst.get("委托方向", "")))
         if not bucket:
+            continue
+        # 回购(正/逆)仅统计银行间，对齐交易员手工口径
+        if bucket in {"正回购", "逆回购"} and str(inst.get("市场", "")) != "银行间":
             continue
         amount = float(inst.get("指令金额", 0) or 0)
         amounts[bucket] += amount
@@ -751,12 +737,10 @@ def aggregate_money_market(events: list[dict], query_date: str = "") -> dict:
             "has_data": False,
         }
 
-    # 将 query_date（YYYYMMDD）转为对应的 UTC 日期（减 1 天）
-    target_utc_date = ""
+    # query_date 即北京业务日期；0013 的 STAT_DT 日期部分就是北京日期
+    target_date = ""
     if query_date:
-        dt = datetime.strptime(query_date, "%Y%m%d")
-        utc_dt = dt - timedelta(days=1)
-        target_utc_date = utc_dt.strftime("%Y-%m-%d")
+        target_date = datetime.strptime(query_date, "%Y%m%d").strftime("%Y-%m-%d")
 
     # 按日期分类
     by_date: dict[str, list[dict]] = {}
@@ -767,16 +751,16 @@ def aggregate_money_market(events: list[dict], query_date: str = "") -> dict:
             by_date.setdefault(date_key, []).append(evt)
 
     # 优先取目标日期，否则取最新日期
-    day_events = by_date.get(target_utc_date)
-    data_date = target_utc_date
+    day_events = by_date.get(target_date)
+    data_date = target_date
     if day_events is None:
         sorted_dates = sorted(by_date.keys(), reverse=True)
         data_date = sorted_dates[0] if sorted_dates else ""
         day_events = by_date.get(data_date, [])
 
-    # 将 data_date（UTC）转为北京时间显示
+    # data_date 即北京业务日期
     if data_date:
-        display_date = (datetime.strptime(data_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+        display_date = data_date
     else:
         display_date = ""
 
@@ -882,27 +866,25 @@ def aggregate_primary_market(events: list[dict], query_date: str = "") -> dict:
     - 汇总行缺失时，从明细行汇总推算 totals。
     - 当日无任何发行数据时 available=False。
 
-    STAT_DT 日期映射同 aggregate_money_market（UTC+1天=北京时间）。
+    STAT_DT 日期部分即北京业务日期（实测 2026-06-22T16:00:00+0000 对应北京 6/22 的发行数据）。
     """
     if not events:
         return {"available": False, "reason": "暂无一级市场发行数据"}
 
-    # UTC 日期映射
-    target_utc_date = ""
+    # 0013 的 STAT_DT 日期部分即北京业务日期，直接匹配
+    target_date = ""
     if query_date:
-        dt = datetime.strptime(query_date, "%Y%m%d")
-        utc_dt = dt - timedelta(days=1)
-        target_utc_date = utc_dt.strftime("%Y-%m-%d")
+        target_date = datetime.strptime(query_date, "%Y%m%d").strftime("%Y-%m-%d")
 
     # 按日期筛选
     day_events: list[dict] = []
     for e in events:
         raw = e.get("STAT_DT", "")
-        if isinstance(raw, str) and raw[:10] == target_utc_date:
+        if isinstance(raw, str) and raw[:10] == target_date:
             day_events.append(e)
 
     # 目标日期无数据时取最新日期
-    data_date = target_utc_date
+    data_date = target_date
     if not day_events and events:
         dates = sorted(
             {str(e.get("STAT_DT", ""))[:10] for e in events if e.get("STAT_DT")},
@@ -912,9 +894,9 @@ def aggregate_primary_market(events: list[dict], query_date: str = "") -> dict:
             data_date = dates[0]
             day_events = [e for e in events if str(e.get("STAT_DT", ""))[:10] == data_date]
 
-    # 北京时间显示
+    # data_date 即北京业务日期
     if data_date:
-        display_date = (datetime.strptime(data_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+        display_date = data_date
     else:
         display_date = ""
 
@@ -958,13 +940,6 @@ def aggregate_primary_market(events: list[dict], query_date: str = "") -> dict:
         "NCD": _get_total("NCD发行"),
     }
 
-    # 生成文字摘要
-    parts = []
-    for label, cat in [("利率债", "利率债"), ("地方债", "地方债"), ("NCD", "NCD")]:
-        if totals[cat] > 0:
-            parts.append(f"{label} {totals[cat]:.0f}亿")
-    summary = "今日一级市场发行：" + "，".join(parts) if parts else "今日一级市场发行数据"
-
     # 按品种分组
     by_type: dict[str, dict] = {}
     for d in issuance_detail:
@@ -974,20 +949,29 @@ def aggregate_primary_market(events: list[dict], query_date: str = "") -> dict:
         by_type[t]["发行(亿)"] += d["金额(亿)"]
         by_type[t]["明细"].append(d)
 
-    structure_parts = []
-    for t, info in sorted(by_type.items()):
-        d_str = ", ".join(f"{d['期限']} {d['金额(亿)']:.0f}亿" for d in info["明细"])
-        structure_parts.append(f"{t}（{d_str}），合计 {info['发行(亿)']:.0f}亿")
-    structure_summary = "；".join(structure_parts) + "。"
+    # 明细按品种（国债→政金债→地方债→NCD）+ 期限长短排序
+    _product_order = {"国债": 0, "政金债": 1, "地方债": 2, "NCD": 3}
+    def _term_months(term: str) -> int:
+        t = str(term).strip()
+        if t.endswith("M"):
+            return int(t[:-1])
+        if t.endswith("Y"):
+            return int(t[:-1]) * 12
+        try:
+            return int(t)
+        except ValueError:
+            return 9999
+    issuance_detail = sorted(
+        issuance_detail,
+        key=lambda d: (_product_order.get(d["品种"], 99), _term_months(d["期限"])),
+    )
 
     return {
         "available": True,
         "data_date": display_date,
-        "summary": summary,
         "totals": totals,
         "structure": sorted(by_type.values(), key=lambda x: x["发行(亿)"], reverse=True),
         "structure_detail": issuance_detail,
-        "structure_summary": structure_summary,
     }
 
 
@@ -1078,6 +1062,24 @@ def _pick_sentence(sentences: list[str], keywords: tuple[str, ...]) -> str:
     return "—"
 
 
+_ALL_TERMS = ("隔夜", "O/N", "7天", "7D", "7d", "七天", "14天", "14D", "14d", "跨月")
+
+
+def _rate_fragment(sentences: list[str], keywords: tuple[str, ...]) -> str:
+    """利率列：选含关键词的句子，从关键词处截取，并在下一个其他期限词前截断。"""
+    sentence = _pick_sentence(sentences, keywords)
+    if sentence == "—":
+        return sentence
+    positions = [sentence.find(kw) for kw in keywords if kw in sentence]
+    if positions:
+        sentence = sentence[min(positions):]
+    other_terms = [t for t in _ALL_TERMS if t not in keywords]
+    cut = min((sentence.find(t) for t in other_terms if sentence.find(t) > 0), default=-1)
+    if cut > 0:
+        sentence = sentence[:cut].rstrip("，,。；; ")
+    return _compact_sentence(sentence)
+
+
 def _session_rank(report: dict) -> int:
     session = str(report.get("session", ""))
     title = str(report.get("title", ""))
@@ -1129,12 +1131,12 @@ def _period_from_sentence(sentence: str) -> str | None:
 
 
 def _market_status_from_text(text: str) -> str:
-    if any(word in text for word in ("偏紧", "收紧", "紧张", "融出减少", "融入困难")):
+    if any(word in text for word in ("偏紧", "收紧", "转紧", "紧张", "融出减少", "融入困难")):
         return "偏紧"
     if any(word in text for word in ("偏松", "转松", "宽松", "融出充足")):
         return "偏松"
-    if any(word in text for word in ("收敛", "转松", "转紧")):
-        return _compact_sentence(_pick_sentence(_split_commentary_sentences(text), ("收敛", "转松", "转紧")), 18)
+    if "收敛" in text:
+        return "收敛"
     if any(word in text for word in ("均衡", "平稳", "稳定")):
         return "均衡"
     return "—"
@@ -1160,13 +1162,6 @@ def _summarize_funding_overall(text: str) -> tuple[str, str, str]:
     trend = _pick_sentence(sentences, ("利率", "价格", "下行", "上行", "回落", "抬升", "稳定"))
     summary = _pick_sentence(sentences, ("小结", "总体", "全天", "尾盘", "资金面"))
     return overall, trend, summary
-
-
-def _extract_funding_sentiment_index(text: str) -> str:
-    match = re.search(r"情绪指数[：:]\s*([0-9]+(?:\s*[-→~]\s*[0-9]+){1,})", text)
-    if not match:
-        return "\\"
-    return re.sub(r"\s*[-~]\s*", " → ", match.group(1).strip())
 
 
 def enrich_omo_rates_from_commentary(money_market: dict, daily_commentary: dict) -> dict:
@@ -1225,9 +1220,9 @@ def build_funding_market_status(daily_commentary: dict, fallback_text: str = "")
         joined = "。".join(sentences)
         row = {
             "时段": period,
-            "隔夜": _pick_sentence(sentences, ("隔夜", "O/N", "ofr", "OFR", "押利率")),
-            "7天": _pick_sentence(sentences, ("7天", "7D", "7d", "七天")),
-            "14天跨月": _pick_sentence(sentences, ("14天", "14D", "14d", "跨月")),
+            "隔夜": _rate_fragment(sentences, ("隔夜", "O/N", "ofr", "OFR", "押利率")),
+            "7天": _rate_fragment(sentences, ("7天", "7D", "7d", "七天")),
+            "14天跨月": _rate_fragment(sentences, ("14天", "14D", "14d", "跨月")),
             "市场状态": _market_status_from_text(joined),
         }
         meaningful = sum(1 for key in ("隔夜", "7天", "14天跨月", "市场状态") if row[key] != "—")
@@ -1251,9 +1246,9 @@ def build_funding_market_status(daily_commentary: dict, fallback_text: str = "")
         sentences = _split_commentary_sentences(content)
         row = {
             "时段": _period_name(rank),
-            "隔夜": _pick_sentence(sentences, ("隔夜", "O/N", "ofr", "OFR", "押利率")),
-            "7天": _pick_sentence(sentences, ("7天", "7D", "7d", "七天")),
-            "14天跨月": _pick_sentence(sentences, ("14天", "14D", "14d", "跨月")),
+            "隔夜": _rate_fragment(sentences, ("隔夜", "O/N", "ofr", "OFR", "押利率")),
+            "7天": _rate_fragment(sentences, ("7天", "7D", "7d", "七天")),
+            "14天跨月": _rate_fragment(sentences, ("14天", "14D", "14d", "跨月")),
             "市场状态": _market_status_from_text(content),
         }
         meaningful = sum(1 for key in ("隔夜", "7天", "14天跨月", "市场状态") if row[key] != "—")
@@ -1274,7 +1269,6 @@ def build_funding_market_status(daily_commentary: dict, fallback_text: str = "")
         "overall": overall,
         "rate_trend": trend,
         "rows": rows,
-        "sentiment_index": _extract_funding_sentiment_index(all_text),
         "summary": summary,
         "fallback": fallback_text or "暂无有效消息",
     }
@@ -1359,7 +1353,6 @@ def collect_all(query_date: str | None = None) -> dict:
 
     # Phase 2：补充数据
     fund_events = []
-    position_forecast = []
     try:
         # 资金事件：查近 7 天
         begin = (datetime.strptime(date_str, "%Y%m%d") - timedelta(days=3)).strftime("%Y%m%d")
@@ -1367,11 +1360,6 @@ def collect_all(query_date: str | None = None) -> dict:
         fund_events = collect_fund_events(begin, end)
     except Exception as e:
         print(f"[警告] 资金事件采集失败: {e}")
-
-    try:
-        position_forecast = collect_position_forecast(date_str)
-    except Exception as e:
-        print(f"[警告] 头寸预测采集失败: {e}")
 
     # Phase 3：QT 日评（Oracle）——召回日评/早评/午评，按原文去重，选代表篇
     qt_commentary: dict[str, Any] = {}

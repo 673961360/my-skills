@@ -22,7 +22,6 @@
 | `风险提示` | 已验证 | 红色编号列表，合同测试覆盖 |
 | 视觉骨架 | 已验证 | 窄幅长图结构，浏览器正常打开 |
 | 短评精炼 prompt（资金/现券/权益） | 已验证 | `prompts/funding-commentary.md`、`bond-commentary.md`、`stock-commentary.md`；6.18 精炼后 HTML 见 `reports/2026-06-18-daily.html` |
-| 短评精炼 prompt（一级） | 已预备 | `prompts/primary-commentary.md`；待一级数据可用后验证 |
 
 ## 当前阻塞
 

@@ -12,6 +12,7 @@
 | 日常生成日报 | `runbook.md`（脚本出骨架后 Claude 必须 WebSearch 注入现券/权益短评，见 `rules.md`"Claude 注入短评"） |
 | 探索新数据源/新功能 | `findings.md`（数据源能力/缺口） |
 | 排查报错 | `rules.md`（踩坑表）+ `runbook.md` |
+| 追溯数据来源/加工血缘 | `data-sources.md`（每板块数据源→采集→加工→脱敏→降级） |
 
 ## 原则
 
