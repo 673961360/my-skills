@@ -604,63 +604,39 @@
     <div class="empty-data">暂无相关数据</div>
     {% endif %}
 
-    <div class="template-subtitle">趋势预测准确率</div>
+    <div class="template-subtitle">预测结论</div>
+    {% if market_forecast.available %}
+    <div class="analysis-box">{{ market_forecast.conclusion }}</div>
+    {% else %}
+    <div class="empty-data">{{ market_forecast.conclusion }}</div>
+    {% endif %}
 
-    {% if trend_forecast.available %}
-    <p style="font-size: 12px; color: #666; margin-bottom: 12px; padding: 8px 12px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #2d5f8a;">{{ trend_forecast.reason }}</p>
+    <div class="inline-heading">关键指标</div>
+    {% if market_forecast.indicators %}
     <table>
       <thead>
         <tr>
-          <th>品种</th>
-          <th>平均利率（%）</th>
-          <th>最高利率（%）</th>
-          <th>最低利率（%）</th>
-          <th>笔数</th>
+          <th>指标</th>
+          <th>数值/方向</th>
+          <th>来源</th>
         </tr>
       </thead>
       <tbody>
-        {% for label, val in trend_forecast.data.items() %}
+        {% for indicator in market_forecast.indicators %}
         <tr>
-          <td><strong>{{ label }}</strong></td>
-          <td>{{ val.平均利率 }}</td>
-          <td class="highlight-red">{{ val.最高利率 }}</td>
-          <td class="highlight-green">{{ val.最低利率 }}</td>
-          <td>{{ val.笔数 }}</td>
+          <td>{{ indicator.name }}</td>
+          <td>{{ indicator.value }}</td>
+          <td>{{ indicator.source }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     {% else %}
-    <div class="empty-data">{{ trend_forecast.reason }}</div>
+    <div class="empty-data">暂无相关数据</div>
     {% endif %}
 
-    <div class="template-subtitle">区间预测准确率</div>
-
-    {% if interval_forecast.available %}
-    <p style="font-size: 12px; color: #666; margin-bottom: 12px; padding: 8px 12px; background: #f8f9fa; border-radius: 4px; border-left: 3px solid #2d5f8a;">{{ interval_forecast.reason }}</p>
-    <table>
-      <thead>
-        <tr>
-          <th>品种</th>
-          <th>利率区间（%）</th>
-          <th>均值（%）</th>
-          <th>样本数</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for label, val in interval_forecast.data.items() %}
-        <tr>
-          <td><strong>{{ label }}</strong></td>
-          <td>{{ "%.2f"|format(val.min) }} ~ {{ "%.2f"|format(val.max) }}</td>
-          <td>{{ "%.2f"|format(val.avg) }}</td>
-          <td>{{ val.count }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div class="empty-data">{{ interval_forecast.reason }}</div>
-    {% endif %}
+    <div class="inline-heading">方法说明</div>
+    <div class="analysis-box">{{ market_forecast.methodology }}</div>
   </div>
 
   <!-- ═══════════════ 04 资金市场分析 ═══════════════ -->

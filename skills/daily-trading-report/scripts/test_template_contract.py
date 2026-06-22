@@ -12,7 +12,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from data_collector import (
     _fmt_template_date,
     build_equity_market_analysis,
-    build_forecast_accuracy_sections,
+    build_market_forecast,
     build_risk_tips,
     generate_market_commentary,
 )
@@ -68,15 +68,13 @@ def build_sample_data() -> dict:
         "trade_prices": {},
         "settlement_forecast": {"总笔数": 0, "总金额": 0, "状态明细": {}},
         "repo_rates": [],
-        "trend_forecast": {
+        "market_forecast": {
             "available": False,
-            "data": {},
-            "reason": "历史预测数据不足，暂无法计算准确率",
-        },
-        "interval_forecast": {
-            "available": False,
-            "data": {},
-            "reason": "历史预测数据不足，暂无法计算准确率",
+            "conclusion": "预测指标来源尚未确认",
+            "indicators": [],
+            "methodology": "资金利率、公开市场操作、债券收益率曲线和 QT 情绪等预测指标尚未完成来源确认，暂不生成方向性预测。",
+            "sources": [],
+            "reason": "当前预测指标数据源尚未完成映射，暂不生成方向性预测。",
         },
         "money_market": {"has_data": False},
         "positions": [],
@@ -298,8 +296,7 @@ class TemplateContractTest(unittest.TestCase):
             "交易金额",
             "02 交收数据汇总",
             "03 市场预测汇总",
-            "趋势预测准确率",
-            "区间预测准确率",
+            "预测结论",
             "04 资金市场分析",
             "现券市场分析",
             "权益市场分析",
@@ -324,17 +321,14 @@ class TemplateContractTest(unittest.TestCase):
         }
         self.assertFalse(forbidden_main_titles & set(parser.titles))
 
-    def test_forecast_accuracy_uses_placeholder_without_history(self):
-        trade_prices = {
-            "质押式回购": {"最低利率": 1.2, "最高利率": 1.8, "平均利率": 1.5, "笔数": 12}
-        }
+    def test_market_forecast_requires_indicators_and_methodology(self):
+        forecast = build_market_forecast([], {}, {})
 
-        forecasts = build_forecast_accuracy_sections(trade_prices)
-
-        self.assertFalse(forecasts["trend_forecast"]["available"])
-        self.assertFalse(forecasts["interval_forecast"]["available"])
-        self.assertEqual("历史预测数据不足，暂无法计算准确率", forecasts["trend_forecast"]["reason"])
-        self.assertEqual("历史预测数据不足，暂无法计算准确率", forecasts["interval_forecast"]["reason"])
+        self.assertFalse(forecast["available"])
+        self.assertEqual("预测指标来源尚未确认", forecast["conclusion"])
+        self.assertEqual([], forecast["indicators"])
+        self.assertIn("资金利率", forecast["methodology"])
+        self.assertIn("债券收益率曲线", forecast["methodology"])
 
     def test_header_uses_reference_date_format(self):
         html = render_sample_report()
@@ -412,7 +406,8 @@ class TemplateContractTest(unittest.TestCase):
 
         self.assertIn("暂无成交", html)
         self.assertIn("暂无相关数据", html)
-        self.assertEqual(2, html.count("历史预测数据不足，暂无法计算准确率"))
+        self.assertIn("预测指标来源尚未确认", html)
+        self.assertNotIn("历史预测数据不足，暂无法计算准确率", html)
 
     def test_visible_report_avoids_internal_implementation_notes(self):
         combined = (
@@ -532,7 +527,7 @@ class TemplateContractTest(unittest.TestCase):
         self.assertNotIn("SETTLEMENT_CHART_SHOULD_NOT_RENDER", settlement_html)
         self.assertNotIn("交收进度分布图", settlement_html)
 
-    def test_forecast_section_contains_rates_and_accuracy_placeholders(self):
+    def test_forecast_section_contains_rates_and_prediction_contract(self):
         html = render_forecast_sample_report()
 
         forecast_pos = html.index('<span class="icon">03</span> 市场预测汇总')
@@ -542,9 +537,12 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("REPO_RATE_CHART", forecast_html)
         self.assertIn('alt="回购利率图"', forecast_html)
         self.assertIn("<td><strong>R001</strong></td>", forecast_html)
-        self.assertIn("趋势预测准确率", forecast_html)
-        self.assertIn("区间预测准确率", forecast_html)
-        self.assertEqual(2, forecast_html.count("历史预测数据不足，暂无法计算准确率"))
+        self.assertIn("预测结论", forecast_html)
+        self.assertIn("关键指标", forecast_html)
+        self.assertIn("方法说明", forecast_html)
+        self.assertIn("预测指标来源尚未确认", forecast_html)
+        self.assertNotIn("趋势预测准确率", forecast_html)
+        self.assertNotIn("区间预测准确率", forecast_html)
         self.assertEqual(1, forecast_html.count('<div class="section">'))
 
     def test_primary_market_section_uses_analysis_then_evidence(self):
@@ -559,12 +557,23 @@ class TemplateContractTest(unittest.TestCase):
 
     def test_primary_market_available_branch_renders_both_subsections(self):
         html = render_primary_market_available_report()
+        primary_start = html.rfind(
+            '<div class="section">',
+            0,
+            html.index('<div class="section-title">一级市场分析</div>'),
+        )
+        primary_end = html.rfind(
+            '<div class="section">',
+            0,
+            html.index('<div class="section-title">风险提示</div>'),
+        )
+        primary_html = html[primary_start:primary_end]
 
-        self.assertIn("发行情况", html)
-        self.assertIn("一级市场发行情况结构化摘要样例。", html)
-        self.assertIn("发行结构分析", html)
-        self.assertIn("发行结构分析结构化摘要样例。", html)
-        self.assertNotIn("待接入", html)
+        self.assertIn("发行情况", primary_html)
+        self.assertIn("一级市场发行情况结构化摘要样例。", primary_html)
+        self.assertIn("发行结构分析", primary_html)
+        self.assertIn("发行结构分析结构化摘要样例。", primary_html)
+        self.assertNotIn("待接入", primary_html)
 
     def test_primary_market_section_renders_all_branches_inside_single_unit(self):
         fallback_html = render_sample_report()

@@ -38,20 +38,15 @@ def _weekday_name(date_str: str) -> str:
     return days[dt.weekday()]
 
 
-def build_forecast_accuracy_sections(trade_prices: dict) -> dict:
-    """Build forecast accuracy sections without inventing history-based metrics."""
-    placeholder = "历史预测数据不足，暂无法计算准确率"
+def build_market_forecast(repo_rates: list[dict], money_market: dict, market_commentary: dict) -> dict:
+    """Build the market forecast contract without inventing unavailable indicators."""
     return {
-        "trend_forecast": {
-            "available": False,
-            "data": {},
-            "reason": placeholder,
-        },
-        "interval_forecast": {
-            "available": False,
-            "data": {},
-            "reason": placeholder,
-        },
+        "available": False,
+        "conclusion": "预测指标来源尚未确认",
+        "indicators": [],
+        "methodology": "资金利率、公开市场操作、债券收益率曲线和 QT 情绪等预测指标尚未完成来源确认，暂不生成方向性预测。",
+        "sources": [],
+        "reason": "当前预测指标数据源尚未完成映射，暂不生成方向性预测。",
     }
 
 
@@ -767,11 +762,9 @@ def collect_all(query_date: str | None = None) -> dict:
         # 02 交收数据汇总
         "settlement_forecast": settlement_forecast,
 
-        # 03 市场预测汇总（回购行情）
+        # 03 市场预测汇总（回购行情 + 预测方法）
         "repo_rates": repo_rates,
-
-        # 板块 6-7：趋势/区间预测准确率（没有历史预测数据时不使用当日价格替代）
-        **build_forecast_accuracy_sections(trade_prices),
+        "market_forecast": build_market_forecast(repo_rates, money_market, market_commentary),
 
         # 04 资金市场分析
         "money_market": money_market,
