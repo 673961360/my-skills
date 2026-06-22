@@ -558,13 +558,23 @@ def generate_market_commentary(qt_commentary: dict) -> dict:
             samples = messages[:min(3, len(messages))]
 
         sample_strs = []
+        seen_contents: set[str] = set()
         for msg in samples:
             sender = msg.get("sender", "未知")
             time_val = msg.get("time", "")
-            content = msg.get("content", "")[:120]
+            content = " ".join(str(msg.get("content", "")).split())[:120]
+            if content in seen_contents:
+                continue
+            seen_contents.add(content)
             sample_strs.append(f"{time_val} {sender}: {content}")
 
-        return f"【资金面情绪】{sentiment}\n\n【关注焦点】{kw_str}\n\n【利率期限】{rate_focus}\n\n【代表性报价】（共 {len(messages)} 条短评）\n" + "\n".join(f"  • {s}" for s in sample_strs)
+        overview = (
+            f"【资金面研判】当日资金面短评共 {len(messages)} 条，整体表现为{sentiment}。"
+            f"交易员讨论主要集中在{kw_str}，期限和品种关注点为{rate_focus}。"
+            "若公开市场操作或债券发行到期数据缺失，本段仅反映 QT 短评中的交易员观点。"
+        )
+        representative = "\n".join(f"{idx}. {text}" for idx, text in enumerate(sample_strs, 1))
+        return f"{overview}\n\n【代表性观点】\n{representative}"
 
     def _analyze_bond(messages: list[dict]) -> str:
         """现券分析。"""

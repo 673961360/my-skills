@@ -367,6 +367,29 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn('<span class="risk-index">1.</span>', html)
         self.assertNotIn("| safe", template)
 
+    def test_funding_commentary_is_integrated_market_judgement(self):
+        commentary = generate_market_commentary({
+            "total": 4,
+            "资金面": {
+                "messages": [
+                    {"time": "09:10", "sender": "交易员A", "content": "资金面平稳，隔夜 R001 融出较多。"},
+                    {"time": "10:20", "sender": "交易员B", "content": "7 天资金略偏紧，R007 报价上行。"},
+                    {"time": "13:30", "sender": "交易员C", "content": "央行逆回购投放后，资金供给转为均衡。"},
+                    {"time": "14:50", "sender": "交易员D", "content": "尾盘融入需求下降，头寸整体平稳。"},
+                ],
+            },
+            "现券": {"messages": []},
+            "一级发行": {"messages": []},
+        })
+
+        funding = commentary["funding"]
+        self.assertIn("【资金面研判】", funding)
+        self.assertIn("当日资金面短评共 4 条", funding)
+        self.assertIn("期限和品种关注点", funding)
+        self.assertIn("【代表性观点】", funding)
+        self.assertIn("1. 09:10 交易员A", funding)
+        self.assertNotIn("【资金面情绪】", funding)
+
     def test_visible_missing_data_uses_contract_fallback_texts(self):
         html = render_sample_report()
         money_detail_html = render_money_market_detail_missing_report()
