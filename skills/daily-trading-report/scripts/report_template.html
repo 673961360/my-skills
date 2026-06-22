@@ -740,6 +740,24 @@
   <!-- ═══════════════ 权益市场分析 ═══════════════ -->
   <div class="section">
     <div class="section-title">权益市场分析</div>
+    {% if equity_indices.available %}
+    <table>
+      <thead><tr><th>指数</th><th>最新价</th><th>涨跌幅</th></tr></thead>
+      <tbody>
+      {% for idx in equity_indices.indices %}
+      <tr>
+        <td>{{ idx.name }}</td>
+        <td class="text-right">{{ "%.2f"|format(idx.latest | float) }}</td>
+        {% set pct = idx.pct_change | float %}
+        <td class="text-right" style="color:{% if pct > 0 %}#e74c3c{% elif pct < 0 %}#27ae60{% else %}inherit{% endif %}">
+          {{ "%+.2f"|format(pct) }}%
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="muted-note">数据来源：{{ equity_indices.source }}</p>
+    {% endif %}
     {% if equity_market.available %}
     <div class="analysis-box">{{ equity_market.commentary }}</div>
     <p class="muted-note">数据来源：外部市场短评</p>

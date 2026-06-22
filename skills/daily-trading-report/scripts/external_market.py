@@ -141,60 +141,125 @@ def collect_chinamoney_treasury_curve(timeout: int = 12) -> dict[str, Any]:
         }
 
 
-def collect_eastmoney_equity_indices(timeout: int = 8) -> dict[str, Any]:
-    """Fetch Shanghai Composite and ChiNext index quotes from Eastmoney."""
-    source = "https://push2.eastmoney.com/api/qt/ulist.np/get"
+# ── 权益指数：新浪财经 + 腾讯财经双源 ──────────────────────────
+_SINA_INDEXES: dict[str, str] = {
+    "sh000001": "上证指数",
+    "sz399001": "深证成指",
+    "sz399006": "创业板指",
+    "sh000688": "科创50",
+}
+_SINA_BASE = "https://hq.sinajs.cn/list="
+_TENCENT_BASE = "https://qt.gtimg.cn/q="
+_SINA_REFERER = "https://finance.sina.com.cn"
+
+
+def _parse_sina_line(line: str) -> dict | None:
+    """Parse one Sina JS var line into {name, latest, pct_change}."""
+    parts = line.split('"')
+    if len(parts) < 2:
+        return None
+    fields = parts[1].split(",")
+    if len(fields) < 10:
+        return None
     try:
-        response = requests.get(
-            source,
-            params={
-                "fltt": "2",
-                "invt": "2",
-                "fields": "f12,f14,f2,f3",
-                "secids": "1.000001,0.399006",
-            },
+        name = fields[0].strip()
+        prev_close = float(fields[2])
+        latest = float(fields[3])
+        pct_change = round((latest - prev_close) / prev_close * 100, 2) if prev_close else 0.0
+        return {"name": name, "latest": str(latest), "pct_change": str(pct_change), "source": "新浪财经"}
+    except (ValueError, IndexError):
+        return None
+
+
+def _parse_tencent_line(line: str) -> dict | None:
+    """Parse one Tencent JS var line into {name, latest, pct_change}."""
+    parts = line.split('"')
+    if len(parts) < 2:
+        return None
+    fields = parts[1].split("~")
+    if len(fields) < 40:
+        return None
+    try:
+        name = fields[1].strip()
+        latest = float(fields[3])
+        pct_change = float(fields[32])
+        return {"name": name, "latest": str(latest), "pct_change": str(pct_change), "source": "腾讯财经"}
+    except (ValueError, IndexError):
+        return None
+
+
+def collect_equity_indices(timeout: int = 10) -> dict[str, Any]:
+    """抓取 A 股四大指数行情：新浪主源，腾讯备源。"""
+    # 主源：新浪财经
+    try:
+        codes = ",".join(_SINA_INDEXES.keys())
+        r = requests.get(
+            f"{_SINA_BASE}{codes}",
+            headers={"Referer": _SINA_REFERER, "User-Agent": USER_AGENT},
             timeout=timeout,
-            headers={
-                "User-Agent": USER_AGENT,
-                "Referer": "https://quote.eastmoney.com/",
-            },
         )
-        response.raise_for_status()
-        payload = response.json()
+        r.encoding = "gbk"
         rows = []
-        for row in payload.get("data", {}).get("diff", []):
-            name = str(row.get("f14", "")).strip()
-            latest = row.get("f2")
-            pct_change = row.get("f3")
-            if name and latest not in (None, "-"):
-                rows.append({
-                    "name": name,
-                    "latest": str(latest),
-                    "pct_change": str(pct_change),
-                    "source": "东方财富行情中心",
-                })
-        return {
-            "available": bool(rows),
-            "source": "东方财富行情中心",
-            "url": source,
-            "indices": rows,
-            "error": "" if rows else "未解析到目标权益指数",
-        }
+        for line in r.text.strip().split("\n"):
+            parsed = _parse_sina_line(line)
+            if parsed:
+                rows.append(parsed)
+        if rows:
+            return {
+                "available": True,
+                "source": "新浪财经",
+                "url": f"{_SINA_BASE}{codes}",
+                "indices": rows,
+                "error": "",
+            }
+    except Exception:
+        pass  # 降级到腾讯
+
+    # 备源：腾讯财经
+    try:
+        tx_codes = ",".join(f"s_{c}" for c in _SINA_INDEXES.keys())
+        r = requests.get(
+            f"{_TENCENT_BASE}{tx_codes}",
+            headers={"User-Agent": USER_AGENT},
+            timeout=timeout,
+        )
+        r.encoding = "gbk"
+        rows = []
+        for line in r.text.strip().split("\n"):
+            parsed = _parse_tencent_line(line)
+            if parsed:
+                rows.append(parsed)
+        if rows:
+            return {
+                "available": True,
+                "source": "腾讯财经",
+                "url": f"{_TENCENT_BASE}{tx_codes}",
+                "indices": rows,
+                "error": "",
+            }
     except Exception as exc:
         return {
             "available": False,
-            "source": "东方财富行情中心",
-            "url": source,
+            "source": "新浪财经 / 腾讯财经",
+            "url": "",
             "indices": [],
-            "error": str(exc),
+            "error": f"双源均失败: {exc}",
         }
+
+    return {
+        "available": False,
+        "source": "新浪财经 / 腾讯财经",
+        "url": "",
+        "indices": [],
+        "error": "双源均失败",
+    }
 
 
 def collect_external_market_indicators() -> dict[str, Any]:
     """Collect all currently supported external market indicators."""
     repo = collect_chinamoney_repo_rates()
     treasury_curve = collect_chinamoney_treasury_curve()
-    equity_indices = collect_eastmoney_equity_indices()
+    equity_indices = collect_equity_indices()
     return {
         "repo_rates": repo,
         "treasury_curve": treasury_curve,

@@ -225,7 +225,13 @@ def build_market_forecast(
     equity_indices = {
         row.get("name"): row for row in external_market.get("equity_indices", {}).get("indices", [])
     }
-    for display_name, source_name in [("上证指数", "上证指数"), ("创业板", "创业板指")]:
+    equity_source = external_market.get("equity_indices", {}).get("source", "新浪财经")
+    for display_name, source_name in [
+        ("上证指数", "上证指数"),
+        ("深证成指", "深证成指"),
+        ("创业板", "创业板指"),
+        ("科创50", "科创50"),
+    ]:
         quote = equity_indices.get(source_name, {})
         latest = _as_float(quote.get("latest"))
         pct_change = _as_float(quote.get("pct_change")) or 0.0
@@ -234,7 +240,7 @@ def build_market_forecast(
             indicators.append({
                 "name": display_name,
                 "value": _fmt_point(latest, 2),
-                "source": "东方财富行情中心",
+                "source": equity_source,
             })
         rows.append({
             "asset_type": "权益",
@@ -1064,6 +1070,9 @@ def collect_all(query_date: str | None = None) -> dict:
 
         # 板块 11：一级市场（发行数据来自资金事件日历）
         "primary_market": primary_market,
+
+        # 权益指数行情（新浪/腾讯双源）
+        "equity_indices": external_market.get("equity_indices", {}),
 
         # 权益市场分析：由 AI 执行期外部短评输入，纯脚本运行时降级
         "equity_market": build_equity_market_analysis(),

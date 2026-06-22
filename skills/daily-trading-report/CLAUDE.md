@@ -9,7 +9,7 @@
 | 任务类型 | 读取文件 |
 |---------|---------|
 | `/goal` 迭代 | `goal.md` → `template-contract.md` → `state.md`（涉及字段/API 时再读 `findings.md`、`rules.md`） |
-| 日常生成日报 | `runbook.md` |
+| 日常生成日报 | `runbook.md`（脚本出骨架后 Claude 必须 WebSearch 注入现券/权益短评，见 `rules.md`"Claude 注入短评"） |
 | 探索新数据源/新功能 | `findings.md`（数据源能力/缺口） |
 | 排查报错 | `rules.md`（踩坑表）+ `runbook.md` |
 

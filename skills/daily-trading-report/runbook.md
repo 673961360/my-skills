@@ -33,7 +33,13 @@ cd scripts && uv sync
 
 1. **确认日期**：默认当日，用户可指定。向用户确认日期和星期
 2. **运行脚本**：`uv run python generate_report.py --date YYYYMMDD`
-3. **精炼短评**：脚本输出的 HTML 中资金/现券栏为原文 dump。Claude 读取原文，按 `prompts/funding-commentary.md` 和 `prompts/bond-commentary.md` 精炼为 3-5 句判断性总结；权益栏按 `prompts/stock-commentary.md` 通过 WebSearch 获取行情并生成总结；一级栏按 `prompts/primary-commentary.md` 尝试从资金日评「一级简评」提取，无则降级。精炼结果直接编辑 HTML 替换。
+3. **Claude 注入短评（必须执行，不可跳过）**：
+   脚本输出的 HTML 中现券/权益栏为占位文本。Claude 必须通过 WebSearch 获取当日市场信息并注入：
+   - **现券市场分析**：若 QT 有现券日评则优先使用；若 QT 无现券日评（如今天只有午评），则 WebSearch "YYYY年M月D日 债券市场 利率债 收盘" 获取国债期货/现券收益率/资金面/机构观点，整合为 3-5 句专业评述
+   - **权益市场分析**：WebSearch "YYYY年M月D日 A股市场收盘总结" 获取主要指数涨跌/成交额/领涨领跌板块/市场驱动因素，整合为 3-5 句专业评述
+   - **资金市场分析**：QT 资金日评原文 dump 已由脚本填入，按 `prompts/funding-commentary.md` 精炼为 3-5 句判断性总结（若模板已含 QT 原文则无需额外搜索）
+   - **一级市场分析**：发行数据已由脚本自动填充，若资金日评「一级简评」有内容则补充精炼
+   - 注入方式：直接 `Edit` HTML 文件替换占位文本
 4. **检查结果**：
    - 成功 → 读取 HTML，向用户展示摘要
    - 失败 → 根据错误信息排查（见下方错误表）

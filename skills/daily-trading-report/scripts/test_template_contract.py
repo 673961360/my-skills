@@ -86,6 +86,7 @@ def build_sample_data() -> dict:
             "primary": "暂无有效消息",
         },
         "primary_market": {"available": False, "reason": "今日无一级市场发行数据"},
+        "equity_indices": {"available": False, "indices": [], "source": ""},
         "equity_market": build_equity_market_analysis(),
         "risk_tips": build_risk_tips([]),
         "qt_commentary": {
@@ -233,6 +234,16 @@ def render_primary_market_available_report() -> str:
 
 def render_equity_market_sample_report() -> str:
     data = build_sample_data()
+    data["equity_indices"] = {
+        "available": True,
+        "source": "新浪财经",
+        "indices": [
+            {"name": "上证指数", "latest": "4163.10", "pct_change": "1.78"},
+            {"name": "深证成指", "latest": "16372.50", "pct_change": "2.13"},
+            {"name": "创业板指", "latest": "4359.39", "pct_change": "2.52"},
+            {"name": "科创50", "latest": "1948.93", "pct_change": "1.96"},
+        ],
+    }
     data["equity_market"] = build_equity_market_analysis("A股市场收盘后外部短评样例。")
     return render_report(data, charts={})
 
@@ -339,7 +350,7 @@ class TemplateContractTest(unittest.TestCase):
 
         self.assertFalse(forecast["available"])
         self.assertEqual("预测指标来源尚未确认", forecast["conclusion"])
-        self.assertEqual(6, len(forecast["rows"]))
+        self.assertEqual(8, len(forecast["rows"]))
         self.assertEqual("暂无有效消息", forecast["rows"][0]["current"])
         self.assertEqual([], forecast["indicators"])
         self.assertIn("资金利率", forecast["methodology"])
@@ -371,7 +382,7 @@ class TemplateContractTest(unittest.TestCase):
         self.assertTrue(forecast["available"])
         self.assertEqual("市场预测汇总表", forecast["conclusion"])
         self.assertIn("资金面当日行情", forecast["methodology"])
-        self.assertEqual(6, len(forecast["rows"]))
+        self.assertEqual(8, len(forecast["rows"]))
         self.assertEqual("资金", forecast["rows"][0]["asset_type"])
         self.assertEqual("不松", forecast["rows"][0]["current"])
         self.assertEqual("现券", forecast["rows"][1]["asset_type"])
