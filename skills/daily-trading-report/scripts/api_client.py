@@ -4,33 +4,22 @@
 网关自动注入 userId 和 sysToken，调用方无需手动传递。
 """
 
-import json
 import time
-from pathlib import Path
 from typing import Any
 
 import requests
 
-# 项目根目录（本文件所在目录）
-PROJECT_DIR = Path(__file__).resolve().parent
-
-
-def _load_config() -> dict:
-    """加载 config.json 配置（位于 skill 根目录）。"""
-    config_path = PROJECT_DIR.parent / "config.json"
-    with open(config_path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
+from config_loader import load_config
 
 # 模块级配置缓存
 _config: dict | None = None
 
 
 def get_config() -> dict:
-    """获取配置（带缓存）。"""
+    """获取配置（带缓存，按 DTR_ENV 合并环境差异）。"""
     global _config
     if _config is None:
-        _config = _load_config()
+        _config = load_config()
     return _config
 
 

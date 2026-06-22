@@ -108,12 +108,22 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="读取权益市场外部短评的 UTF-8 文本文件；优先级高于 --equity-commentary",
     )
+    parser.add_argument(
+        "--env",
+        type=str,
+        default=os.getenv("DTR_ENV", "test"),
+        choices=["test", "prod"],
+        help="目标环境：test（默认）/ prod；也可用环境变量 DTR_ENV 指定",
+    )
     return parser.parse_args()
 
 
 def main():
     """主入口。"""
     args = parse_args()
+
+    # 设定目标环境（供 api_client / db_client 的配置加载读取）
+    os.environ["DTR_ENV"] = args.env
 
     # 确定日期
     query_date = _parse_date(args.date)
@@ -129,6 +139,7 @@ def main():
     # Step 1: 加载配置
     cfg = get_config()
     print(f"\n[1/4] 配置加载完成")
+    print(f"  环境: {args.env}")
     print(f"  API: {cfg['api_base_url']}")
     print(f"  输出目录: {cfg.get('output_dir', 'reports')}")
 

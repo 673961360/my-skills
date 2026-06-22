@@ -21,14 +21,11 @@ Channel 说明：
   MSG_GROUP_NAME  VARCHAR2 — 群名称
 """
 
-import json
 import os
 import sys
-from pathlib import Path
 from typing import Any
 
-# 项目根目录
-PROJECT_DIR = Path(__file__).resolve().parent
+from config_loader import load_config
 
 # Oracle Client 库路径（thick 模式需要）
 _ORACLE_LIB_DIR = os.environ.get(
@@ -60,11 +57,8 @@ def _init_oracle():
 
 
 def _get_config() -> dict:
-    """获取配置中的 Oracle 部分（config.json 位于 skill 根目录）。"""
-    config_path = PROJECT_DIR.parent / "config.json"
-    with open(config_path, "r", encoding="utf-8") as f:
-        cfg = json.load(f)
-    return cfg.get("oracle", {})
+    """获取配置中的 Oracle 部分（已按 DTR_ENV 合并环境差异）。"""
+    return load_config().get("oracle", {})
 
 
 def _get_connection():
