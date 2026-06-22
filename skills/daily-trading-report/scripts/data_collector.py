@@ -1,7 +1,7 @@
 """数据采集模块 — 从 AI Gateway API 采集并聚合交易数据。
 
 采集流程：
-  Phase 1（并行基础数据）：O32指令、头寸、交收进度、回购行情、交易日历
+  Phase 1（并行基础数据）：O32指令、头寸、应急回购、回购行情、交易日历
   Phase 2（补充数据）：对手信息、头寸预测、资金事件
 """
 
@@ -359,23 +359,47 @@ def collect_position_data() -> list[dict]:
     return body.get("rows", [])
 
 
-def collect_settlement_progress(query_date: str) -> list[dict]:
-    """采集交收进度汇总数据（cat_api_trade_0021）。"""
-    result = call_api("cat_api_trade_0021", {
+def _direct_time_hhmmss(text) -> str:
+    """从 repoInsDirectTimeText（如 '谢创 2026-06-22 10:14:28'）提取 HH:MM:SS。
+
+    格式：'<人名> <YYYY-MM-DD> <HH:MM:SS>'。解析失败返回 ''。
+    """
+    if not isinstance(text, str):
+        return ""
+    parts = text.strip().split()
+    if len(parts) < 2:
+        return ""
+    segs = parts[-1].split(":")
+    if len(segs) == 3 and all(len(s) == 2 for s in segs):
+        return f"{segs[0]}:{segs[1]}:{segs[2]}"
+    return ""
+
+
+def collect_emergency_repo(query_date: str) -> list[dict]:
+    """采集应急回购明细（cat_api_trade_0008 实时正回购询价结果）。
+
+    应急判定：当日（opDate == query_date）且指令下达时间（repoInsDirectTimeText）
+    在 16:00 及以后。0008 服务端不支持按日期/时间过滤，需客户端二次筛选。
+    返回原始行（含真实 productName，外流前需脱敏）。
+    """
+    result = call_api("cat_api_trade_0008", {
+        "rows": 2000,
         "page": 1,
-        "size": 2000,
-        "productIdList": [],
-        "businDateStart": query_date,
-        "businDateEnd": query_date,
-        "businTypeList": [],
-        "hideTgProductData": True,
-        "hideInvalid": True,
-        "showUnDeal": False,
-        "hideSettleSuccess": False,
-        "hideSettleByHandSuccess": False,
+        "rivalIdList": [],
+        "inqResStatusList": [1, 3, 9],  # 有效 / 草稿 / 已下达
+        "sideCodeList": ["7"],          # 正回购
     })
-    body = result.get("data", {}).get("body", {})
-    return body.get("rows", [])
+    # 响应结构：data._embedded.vos[].inqResultMgrQueryInfos[]
+    embedded = result.get("data", {}).get("_embedded", {})
+    rows: list[dict] = []
+    for vo in embedded.get("vos", []) or []:
+        rows.extend(vo.get("inqResultMgrQueryInfos", []) or [])
+
+    return [
+        r for r in rows
+        if r.get("opDate") == query_date
+        and _direct_time_hhmmss(r.get("repoInsDirectTimeText", ""))[:5] >= "16:00"
+    ]
 
 
 def collect_repo_rates() -> list[dict]:
@@ -544,25 +568,47 @@ def aggregate_trade_prices(instructions: list[dict]) -> dict:
     return result
 
 
-def aggregate_settlement_forecast(rows: list[dict]) -> dict:
-    """聚合交收预测数据。"""
-    status_map: dict[str, dict[str, Any]] = {}
+def aggregate_emergency_repo(rows: list[dict]) -> dict:
+    """聚合应急回购明细，供 02 板块渲染。
 
-    for row in rows:
-        progress = row.get("settleProgressDesc", "未知")
-        if progress not in status_map:
-            status_map[progress] = {"笔数": 0, "金额": 0.0}
+    按指令下达时间升序排列；同一 productId 多笔记录映射到同一「产品N」编号。
+    """
+    if not rows:
+        return {"has_data": False, "明细": [], "总笔数": 0, "总金额万元": 0.0}
 
-        status_map[progress]["笔数"] += 1
-        status_map[progress]["金额"] += float(row.get("settleAmt", 0) or 0)
+    sorted_rows = sorted(
+        rows, key=lambda r: _direct_time_hhmmss(r.get("repoInsDirectTimeText", ""))
+    )
 
-    total = sum(v["笔数"] for v in status_map.values())
-    total_amt = sum(v["金额"] for v in status_map.values())
+    product_index: dict[str, str] = {}
+    counter = 0
+    items: list[dict] = []
+    for row in sorted_rows:
+        pid = str(row.get("productId") or row.get("productCode") or "")
+        if pid not in product_index:
+            counter += 1
+            product_index[pid] = f"产品{counter}"
+
+        # 利率：优先 repoPriceText（如 'R+0BP'），为空回退 repurRate
+        rate_text = (row.get("repoPriceText") or "").strip()
+        利率 = rate_text if rate_text else str(row.get("repurRate", "0") or "0")
+
+        items.append({
+            "序号": len(items) + 1,
+            "产品编号": product_index[pid],
+            "回购金额万元": round(float(row.get("repurAmt", 0) or 0) / 10000, 2),
+            "期限天": int(row.get("repurDay", 0) or 0),
+            "利率": 利率,
+            "对手方": row.get("rivalName", "") or "",
+            "操作时间": _direct_time_hhmmss(row.get("repoInsDirectTimeText", "")),
+            "状态": row.get("inqResStatusText", "") or "",
+        })
 
     return {
-        "状态明细": status_map,
-        "总笔数": total,
-        "总金额": total_amt,
+        "has_data": True,
+        "明细": items,
+        "总笔数": len(items),
+        "总金额万元": round(sum(x["回购金额万元"] for x in items), 2),
     }
 
 
@@ -676,15 +722,14 @@ def aggregate_money_market(events: list[dict], query_date: str = "") -> dict:
 def aggregate_risk_warnings(
     instructions: list[dict],
     positions: list[dict],
-    settlement_rows: list[dict],
 ) -> list[dict]:
     """风险预警规则引擎。
 
     规则：
     1. 头寸不足：总头寸可用 < 阈值
-    2. 交收异常：存在交收失败/指令错误的记录
-    3. 大额到期：单笔回购到期金额过大
-    4. 指令质量：指令错误率偏高
+    2. 指令质量：指令错误率偏高
+
+    注：原「交收异常」规则随 cat_api_trade_0021 弃用而移除（0008 无交收进度字段）。
     """
     warnings: list[dict] = []
 
@@ -700,19 +745,7 @@ def aggregate_risk_warnings(
                 "等级": "高",
             })
 
-    # 规则 2：检查交收异常
-    error_states = {"交收失败", "指令错误", "等调款"}
-    for row in settlement_rows:
-        progress = row.get("settleProgressDesc", "")
-        if progress in error_states or "失败" in progress or "错误" in progress:
-            warnings.append({
-                "风险类型": "交收异常",
-                "产品": row.get("productName", "未知"),
-                "详情": f"{row.get('tradeTypeDesc', '')} - {progress}",
-                "等级": "中",
-            })
-
-    # 规则 3：指令质量
+    # 规则 2：指令质量
     error_count = 0
     total_count = len(instructions)
     for inst in instructions:
@@ -731,181 +764,50 @@ def aggregate_risk_warnings(
     return warnings
 
 
-def generate_market_commentary(qt_commentary: dict) -> dict:
-    """基于 QT 短评数据生成资金、现券和一级市场分析文字。
+def _clean_commentary_body(content: str) -> str:
+    """无损清洗日评正文：去纯 URL 行、合并多余空行、去行尾空格。
 
-    从资金面/现券/一级发行三个分类的短评中提取关键信息，
-    生成结构化的市场分析文字。
+    只删格式噪音，不改任何文字判断。
+    """
+    lines = []
+    for line in content.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if "http://" in s or "https://" in s:
+            continue
+        lines.append(s)
+    return "\n".join(lines)
+
+
+def generate_market_commentary(daily_commentary: dict) -> dict[str, str]:
+    """基于日评代表篇生成资金/现券/一级市场分析文字。
+
+    输入 fetch_daily_commentary 返回的结构（含 representative）。每主题整段
+    引用代表篇原文（无损清洗）+ 来源标注；无日评时降级占位。一级无独立
+    日评（见 findings），固定降级。不综合、不摘要、不枚举小节关键词。
 
     Returns:
-        {
-            "funding": "资金面分析文字",
-            "bond": "现券分析文字",
-            "primary": "一级发行分析文字",
-        }
+        {"funding": str, "bond": str, "primary": str}
     """
-    if not qt_commentary or qt_commentary.get("total", 0) == 0:
-        return {
-            "funding": "暂无有效消息",
-            "bond": "暂无有效消息",
-            "primary": "暂无有效消息",
-        }
+    rep = (daily_commentary or {}).get("representative") or {}
 
-    def _analyze_funding(messages: list[dict]) -> str:
-        """资金面分析。"""
-        if not messages:
+    def _render(theme_report: dict | None) -> str:
+        if not theme_report:
             return "暂无有效消息"
-
-        # 统计关键词
-        kw_freq: dict[str, int] = {}
-        sentiment_keywords = {"紧张": 0, "宽松": 0, "平稳": 0, "均衡": 0}
-        rate_keywords = {"R001": 0, "R007": 0, "DR001": 0, "DR007": 0, "隔夜": 0, "7 天": 0, "14 天": 0}
-        for msg in messages[:200]:
-            content = str(msg.get("content", ""))
-            for kw in ["回购", "资金", "头寸", "融出", "融入", "利率", "加权", "央行", "逆回购", "MLF", "OMO", "投放", "回笼"]:
-                if kw in content:
-                    kw_freq[kw] = kw_freq.get(kw, 0) + 1
-            for sent_kw in sentiment_keywords:
-                if sent_kw in content:
-                    sentiment_keywords[sent_kw] += 1
-            for rate_kw in rate_keywords:
-                if rate_kw in content:
-                    rate_keywords[rate_kw] += 1
-
-        # 判断资金面情绪
-        tight = sentiment_keywords["紧张"]
-        loose = sentiment_keywords["宽松"]
-        if tight > loose * 1.5:
-            sentiment = "偏紧，交易员普遍反映资金难借"
-        elif tight > loose:
-            sentiment = "略偏紧，部分期限资金需求旺盛"
-        elif loose > tight * 1.5:
-            sentiment = "偏宽松，资金融出意愿较强"
-        elif loose > tight:
-            sentiment = "略偏宽松，资金面整体均衡"
-        else:
-            sentiment = "平稳均衡，供需基本匹配"
-
-        top_kws = sorted(kw_freq.items(), key=lambda x: x[1], reverse=True)[:6]
-        kw_str = "、".join(f"{kw}" for kw, _ in top_kws) if top_kws else "无高频关键词"
-
-        # 利率期限关注
-        rate_strs = [f"{k}({v}次)" for k, v in sorted(rate_keywords.items(), key=lambda x: x[1], reverse=True) if v > 0][:5]
-        rate_focus = "、".join(rate_strs) if rate_strs else "无特定利率品种关注"
-
-        # 选取代表性消息（早/中/晚各取 2 条，共 6 条）
-        samples = []
-        if len(messages) >= 6:
-            step = len(messages) // 6
-            samples = [messages[i * step] for i in range(6)]
-        elif len(messages) >= 3:
-            samples = [messages[0], messages[len(messages)//2], messages[-1]]
-        else:
-            samples = messages[:min(3, len(messages))]
-
-        sample_strs = []
-        seen_contents: set[str] = set()
-        for msg in samples:
-            sender = msg.get("sender", "未知")
-            time_val = msg.get("time", "")
-            content = " ".join(str(msg.get("content", "")).split())[:120]
-            if content in seen_contents:
-                continue
-            seen_contents.add(content)
-            sample_strs.append(f"{time_val} {sender}: {content}")
-
-        overview = (
-            f"【资金面研判】当日资金面短评共 {len(messages)} 条，整体表现为{sentiment}。"
-            f"交易员讨论主要集中在{kw_str}，期限和品种关注点为{rate_focus}。"
-            "若公开市场操作或债券发行到期数据缺失，本段仅反映 QT 短评中的交易员观点。"
-        )
-        representative = "\n".join(f"{idx}. {text}" for idx, text in enumerate(sample_strs, 1))
-        return f"{overview}\n\n【代表性观点】\n{representative}"
-
-    def _analyze_bond(messages: list[dict]) -> str:
-        """现券分析。"""
-        if not messages:
-            return "暂无有效消息"
-
-        kw_freq: dict[str, int] = {}
-        direction_keywords = {"买券": 0, "卖券": 0, "OFR": 0, "BID": 0}
-        for msg in messages[:200]:
-            content = str(msg.get("content", ""))
-            for kw in ["现券", "债券", "收益率", "估值", "成交", "活跃券", "国债", "政金债", "信用债", "城投", "地产债", "BP", "YTM", "久期", "利差"]:
-                if kw in content:
-                    kw_freq[kw] = kw_freq.get(kw, 0) + 1
-            for dir_kw in direction_keywords:
-                if dir_kw in content.upper():
-                    direction_keywords[dir_kw] += 1
-
-        top_kws = sorted(kw_freq.items(), key=lambda x: x[1], reverse=True)[:6]
-        kw_str = "、".join(f"{kw}" for kw, _ in top_kws) if top_kws else "无高频关键词"
-
-        # 买卖方向
-        buy = direction_keywords["买券"] + direction_keywords["BID"]
-        sell = direction_keywords["卖券"] + direction_keywords["OFR"]
-        if buy > sell * 1.5:
-            direction = "买方力量较强，市场需求旺盛"
-        elif sell > buy * 1.5:
-            direction = "卖方力量较强，市场供给充足"
-        else:
-            direction = "买卖双方力量相对均衡"
-
-        samples = []
-        if len(messages) >= 6:
-            step = len(messages) // 6
-            samples = [messages[i * step] for i in range(6)]
-        elif len(messages) >= 3:
-            samples = [messages[0], messages[len(messages)//2], messages[-1]]
-        else:
-            samples = messages[:min(3, len(messages))]
-
-        sample_strs = []
-        for msg in samples:
-            sender = msg.get("sender", "未知")
-            time_val = msg.get("time", "")
-            content = msg.get("content", "")[:120]
-            sample_strs.append(f"{time_val} {sender}: {content}")
-
-        return f"【市场情绪】{direction}\n\n【关注焦点】{kw_str}\n\n【代表性成交】（共 {len(messages)} 条短评）\n" + "\n".join(f"  • {s}" for s in sample_strs)
-
-    def _analyze_primary(messages: list[dict]) -> str:
-        """一级发行分析。"""
-        if not messages:
-            return "暂无有效消息"
-
-        kw_freq: dict[str, int] = {}
-        for msg in messages[:200]:
-            content = str(msg.get("content", ""))
-            for kw in ["一级", "发行", "投标", "新债", "招标", "结果", "边际", "倍率", "募", "全场倍", "边际倍"]:
-                if kw in content:
-                    kw_freq[kw] = kw_freq.get(kw, 0) + 1
-
-        top_kws = sorted(kw_freq.items(), key=lambda x: x[1], reverse=True)[:6]
-        kw_str = "、".join(f"{kw}" for kw, _ in top_kws) if top_kws else "无高频关键词"
-
-        samples = []
-        if len(messages) >= 6:
-            step = len(messages) // 6
-            samples = [messages[i * step] for i in range(6)]
-        elif len(messages) >= 3:
-            samples = [messages[0], messages[len(messages)//2], messages[-1]]
-        else:
-            samples = messages[:min(3, len(messages))]
-
-        sample_strs = []
-        for msg in samples:
-            sender = msg.get("sender", "未知")
-            time_val = msg.get("time", "")
-            content = msg.get("content", "")[:120]
-            sample_strs.append(f"{time_val} {sender}: {content}")
-
-        return f"【关注焦点】{kw_str}\n\n【代表性信息】（共 {len(messages)} 条短评）\n" + "\n".join(f"  • {s}" for s in sample_strs)
+        body = _clean_commentary_body(str(theme_report.get("content", "")))
+        source = str(theme_report.get("sender", "")).strip()
+        time_val = str(theme_report.get("time", "")).strip()
+        session = str(theme_report.get("session", "")).strip()
+        parts = [p for p in (source, f"{time_val} {session}".strip()) if p]
+        if parts:
+            return f"{body}\n\n（来源：{' · '.join(parts)}）"
+        return body
 
     return {
-        "funding": _analyze_funding(qt_commentary.get("资金面", {}).get("messages", [])),
-        "bond": _analyze_bond(qt_commentary.get("现券", {}).get("messages", [])),
-        "primary": _analyze_primary(qt_commentary.get("一级发行", {}).get("messages", [])),
+        "funding": _render(rep.get("资金")),
+        "bond": _render(rep.get("现券")),
+        "primary": "暂无相关数据",
     }
 
 
@@ -932,7 +834,7 @@ def collect_all(query_date: str | None = None) -> dict:
         futures = {
             executor.submit(collect_trade_instructions, date_str): "instructions",
             executor.submit(collect_position_data): "positions",
-            executor.submit(collect_settlement_progress, date_str): "settlement",
+            executor.submit(collect_emergency_repo, date_str): "emergency_repo",
             executor.submit(collect_repo_rates): "repo_rates",
             executor.submit(collect_trading_calendar): "calendar",
         }
@@ -948,7 +850,7 @@ def collect_all(query_date: str | None = None) -> dict:
 
     instructions = data.get("instructions", [])
     positions = data.get("positions", [])
-    settlement_rows = data.get("settlement", [])
+    emergency_rows = data.get("emergency_repo", [])
     repo_rates = data.get("repo_rates", [])
     calendar = data.get("calendar", [])
 
@@ -971,17 +873,18 @@ def collect_all(query_date: str | None = None) -> dict:
     except Exception as e:
         print(f"[警告] 头寸预测采集失败: {e}")
 
-    # Phase 3：QT 聊天短评（Oracle）
+    # Phase 3：QT 日评（Oracle）——召回日评/早评/午评，按原文去重，选代表篇
     qt_commentary: dict[str, Any] = {}
     try:
-        from db_client import fetch_and_categorize
-        qt_commentary = fetch_and_categorize(date_str)
-        print(f"  QT短评采集完成：{qt_commentary.get('total', 0)} 条")
+        from db_client import fetch_daily_commentary
+        qt_commentary = fetch_daily_commentary(date_str)
+        print(f"  QT日评采集完成：召回 {qt_commentary.get('total_raw', 0)} 条 → 去重 {qt_commentary.get('total', 0)} 篇")
     except Exception as e:
-        print(f"[警告] QT短评采集失败（非关键，继续）: {e}")
-        qt_commentary = {"total": 0, "channels": {}, "资金面": {"count": 0, "messages": []},
-                         "现券": {"count": 0, "messages": []}, "一级发行": {"count": 0, "messages": []},
-                         "其他": {"count": 0, "messages": []}}
+        print(f"[警告] QT日评采集失败（非关键，继续）: {e}")
+        qt_commentary = {
+            "total": 0, "total_raw": 0, "reports": [],
+            "representative": {"资金": None, "现券": None},
+        }
 
     external_market = {}
     try:
@@ -994,9 +897,9 @@ def collect_all(query_date: str | None = None) -> dict:
     trade_overview = aggregate_trade_overview(instructions)
     trade_count_hourly = aggregate_trade_count_by_hour(instructions)
     trade_prices = aggregate_trade_prices(instructions)
-    settlement_forecast = aggregate_settlement_forecast(settlement_rows)
+    emergency_repo = aggregate_emergency_repo(emergency_rows)
     money_market = aggregate_money_market(fund_events, date_str)
-    risk_warnings = aggregate_risk_warnings(instructions, positions, settlement_rows)
+    risk_warnings = aggregate_risk_warnings(instructions, positions)
     market_commentary = generate_market_commentary(qt_commentary)
 
     forecast_repo_rates = repo_rates or external_market.get("repo_rates", {}).get("repo_rates", [])
@@ -1020,7 +923,7 @@ def collect_all(query_date: str | None = None) -> dict:
         "trade_prices": trade_prices,
 
         # 02 交收数据汇总
-        "settlement_forecast": settlement_forecast,
+        "emergency_repo": emergency_repo,
 
         # 03 市场预测汇总（回购行情 + 预测方法）
         "repo_rates": forecast_repo_rates,
@@ -1056,7 +959,7 @@ def collect_all(query_date: str | None = None) -> dict:
         # 原始数据（供图表生成使用）
         "_instructions": instructions,
         "_positions": positions,
-        "_settlement_rows": settlement_rows,
+        "_emergency_rows": emergency_rows,
         "_repo_rates": forecast_repo_rates,
         "_fund_events": fund_events,
         "_external_market": external_market,

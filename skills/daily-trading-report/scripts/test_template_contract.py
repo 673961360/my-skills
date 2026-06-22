@@ -66,7 +66,7 @@ def build_sample_data() -> dict:
         "trade_overview": {"总笔数": 0, "总指令金额": 0, "总成交金额": 0, "分类明细": {}},
         "trade_count_hourly": [],
         "trade_prices": {},
-        "settlement_forecast": {"总笔数": 0, "总金额": 0, "状态明细": {}},
+        "emergency_repo": {"has_data": False, "明细": [], "总笔数": 0, "总金额万元": 0.0},
         "repo_rates": [],
         "market_forecast": {
             "available": False,
@@ -90,10 +90,9 @@ def build_sample_data() -> dict:
         "risk_tips": build_risk_tips([]),
         "qt_commentary": {
             "total": 0,
-            "channels": {},
-            "资金面": {"count": 0, "messages": []},
-            "现券": {"count": 0, "messages": []},
-            "一级发行": {"count": 0, "messages": []},
+            "total_raw": 0,
+            "reports": [],
+            "representative": {"资金": None, "现券": None},
         },
     }
 
@@ -161,14 +160,18 @@ def render_trade_chart_sample_report() -> str:
 
 def render_settlement_sample_report() -> str:
     data = build_sample_data()
-    data["settlement_forecast"] = {
-        "总笔数": 8,
-        "总金额": 32_000_000,
-        "状态明细": {
-            "成功": {"笔数": 5, "金额": 20_000_000},
-            "进行中": {"笔数": 2, "金额": 8_000_000},
-            "失败": {"笔数": 1, "金额": 4_000_000},
-        },
+    data["emergency_repo"] = {
+        "has_data": True,
+        "明细": [
+            {"序号": 1, "产品编号": "产品1", "回购金额万元": 2000.0,
+             "期限天": 1, "利率": "R+0BP", "对手方": "上清所",
+             "操作时间": "16:15:30", "状态": "有效"},
+            {"序号": 2, "产品编号": "产品1", "回购金额万元": 3000.0,
+             "期限天": 7, "利率": "2.10", "对手方": "中债登",
+             "操作时间": "16:42:10", "状态": "已下达"},
+        ],
+        "总笔数": 2,
+        "总金额万元": 5000.0,
     }
     charts = {"settlement": "SETTLEMENT_CHART_SHOULD_NOT_RENDER"}
     return render_report(data, charts=charts)
@@ -297,6 +300,7 @@ class TemplateContractTest(unittest.TestCase):
             "交易笔数",
             "交易金额",
             "02 交收数据汇总",
+            "应急回购明细（16:00 后正回购）",
             "03 市场预测汇总",
             "预测结论",
             "04 资金市场分析",
@@ -394,34 +398,59 @@ class TemplateContractTest(unittest.TestCase):
 
         self.assertEqual("暂无有效消息", commentary["funding"])
         self.assertEqual("暂无有效消息", commentary["bond"])
-        self.assertEqual("暂无有效消息", commentary["primary"])
+        self.assertEqual("暂无相关数据", commentary["primary"])
         self.assertEqual(3, len(tips))
         self.assertIn('<ol class="risk-list">', html)
         self.assertIn('<span class="risk-index">1.</span>', html)
         self.assertNotIn("| safe", template)
 
-    def test_funding_commentary_is_integrated_market_judgement(self):
+    def test_funding_commentary_quotes_daily_report_with_source(self):
         commentary = generate_market_commentary({
-            "total": 4,
-            "资金面": {
-                "messages": [
-                    {"time": "09:10", "sender": "交易员A", "content": "资金面平稳，隔夜 R001 融出较多。"},
-                    {"time": "10:20", "sender": "交易员B", "content": "7 天资金略偏紧，R007 报价上行。"},
-                    {"time": "13:30", "sender": "交易员C", "content": "央行逆回购投放后，资金供给转为均衡。"},
-                    {"time": "14:50", "sender": "交易员D", "content": "尾盘融入需求下降，头寸整体平稳。"},
-                ],
+            "representative": {
+                "资金": {
+                    "content": "6.18资金日评 今日资金面整体呈均衡态势。早盘资金充裕，隔夜成交在加权-1.46%区间。",
+                    "sender": "吕浩轩",
+                    "time": "17:00:00",
+                    "session": "日评",
+                    "title": "6.18资金日评",
+                    "theme": "资金",
+                },
+                "现券": None,
             },
-            "现券": {"messages": []},
-            "一级发行": {"messages": []},
         })
 
         funding = commentary["funding"]
-        self.assertIn("【资金面研判】", funding)
-        self.assertIn("当日资金面短评共 4 条", funding)
-        self.assertIn("期限和品种关注点", funding)
-        self.assertIn("【代表性观点】", funding)
-        self.assertIn("1. 09:10 交易员A", funding)
-        self.assertNotIn("【资金面情绪】", funding)
+        # 整段引用日评原文（含情绪与数据，非机器拼接）
+        self.assertIn("资金面整体呈均衡态势", funding)
+        self.assertIn("隔夜成交在加权-1.46%区间", funding)
+        # 来源标注
+        self.assertIn("吕浩轩", funding)
+        self.assertIn("17:00:00", funding)
+        self.assertIn("日评", funding)
+        # 无机器过程描述（contract 禁止）
+        self.assertNotIn("【资金面研判】", funding)
+        self.assertNotIn("共 ", funding)
+        self.assertNotIn("无高频关键词", funding)
+        # bond 无日评降级；一级固定降级
+        self.assertEqual("暂无有效消息", commentary["bond"])
+        self.assertEqual("暂无相关数据", commentary["primary"])
+
+    def test_commentary_strips_url_noise_preserving_text(self):
+        commentary = generate_market_commentary({
+            "representative": {
+                "资金": {
+                    "content": "资金面均衡偏松。\n发行汇总：http://test.idbhost.com/x\n隔夜1.46%。",
+                    "sender": "测试机构",
+                    "time": "17:00:00",
+                    "session": "日评",
+                },
+                "现券": None,
+            },
+        })
+        funding = commentary["funding"]
+        self.assertIn("资金面均衡偏松", funding)
+        self.assertIn("隔夜1.46%", funding)
+        self.assertNotIn("http://", funding)
 
     def test_visible_missing_data_uses_contract_fallback_texts(self):
         html = render_sample_report()
@@ -557,14 +586,18 @@ class TemplateContractTest(unittest.TestCase):
         forecast_pos = html.index('<span class="icon">03</span> 市场预测汇总')
         settlement_html = html[settlement_pos:forecast_pos]
 
-        self.assertIn("交收总笔数", settlement_html)
-        self.assertIn("交收总金额（万元）", settlement_html)
-        self.assertIn("<th>交收状态</th>", settlement_html)
-        self.assertIn("<td>成功</td>", settlement_html)
-        self.assertIn("<td>进行中</td>", settlement_html)
-        self.assertIn("<td>失败</td>", settlement_html)
+        self.assertIn("应急回购笔数", settlement_html)
+        self.assertIn("应急回购金额（万元）", settlement_html)
+        self.assertIn("<th>产品编号</th>", settlement_html)
+        self.assertIn("<td>产品1</td>", settlement_html)
+        self.assertIn("16:15:30", settlement_html)
+        self.assertIn("上清所", settlement_html)
         self.assertNotIn("SETTLEMENT_CHART_SHOULD_NOT_RENDER", settlement_html)
         self.assertNotIn("交收进度分布图", settlement_html)
+        # 脱敏：真实产品代码/名称不得出现在 02 板块
+        self.assertNotIn("003749", settlement_html)
+        self.assertNotIn("创金", settlement_html)
+        self.assertNotIn("合信", settlement_html)
 
     def test_forecast_section_contains_rates_and_prediction_contract(self):
         html = render_forecast_sample_report()

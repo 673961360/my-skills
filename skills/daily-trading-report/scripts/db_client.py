@@ -1,7 +1,11 @@
 """Oracle 数据库客户端 — 查询 QT 聊天消息数据库。
 
 数据源：ats.t_repo_robot_chatmessage 表
-用途：获取资金、现券、一级发行市场的交易员市场短评
+用途：召回当日市场日评（资金/现券），供日报市场分析栏目整段引用。
+
+QT 表本质是交易报价/询价聊天流（单日 13 万+条），真正的市场日评
+（机构收盘研报）只占其中几十条。本模块用「日评/早评/午评」关键词
+召回、按原文去重、按标题分主题、选代表篇。详见 findings.md「QT 短评」一节。
 
 Channel 说明：
   1 = 森浦QT
@@ -9,20 +13,9 @@ Channel 说明：
   4 = 快确QT
 
 注意：目标数据库为 Oracle 11.2.0.4，需使用 thick 模式（依赖 Oracle Instant Client）。
-
-表结构（关键字段）：
-  MSG_DATE      NUMBER   — 消息日期 YYYYMMDD
-  MSG_TIME      NUMBER   — 消息时间 HHMMSS
-  CHANNEL       NUMBER   — 频道（1/3/4）
-  CONTENT       VARCHAR2 — 消息内容
-  MSG_SEND_NAME VARCHAR2 — 发送人姓名
-  MSG_SEND_CODE VARCHAR2 — 发送人代码
-  TRADERIVAL_NAME VARCHAR2 — 交易对手名称
-  MSG_GROUP_NAME  VARCHAR2 — 群名称
 """
 
 import os
-import sys
 from typing import Any
 
 from config_loader import load_config
@@ -68,14 +61,13 @@ def _get_connection():
     _init_oracle()
 
     cfg = _get_config()
-    conn = oracledb.connect(
+    return oracledb.connect(
         user=cfg["user"],
         password=cfg["password"],
         host=cfg["host"],
         port=cfg["port"],
         service_name=cfg["service_name"],
     )
-    return conn
 
 
 def _row_to_dict(cursor, row) -> dict:
@@ -88,216 +80,117 @@ def _row_to_dict(cursor, row) -> dict:
     return record
 
 
-def fetch_chat_messages(query_date: str, channel: str | None = None) -> list[dict]:
-    """查询 QT 聊天消息。
-
-    Args:
-        query_date: 查询日期 YYYYMMDD
-        channel: 频道筛选 ("1"=森浦, "3"=通达信, "4"=快确)，None=全部
-
-    Returns:
-        消息记录列表
-    """
-    cfg = _get_config()
-    table = cfg.get("comment_table", "ats.t_repo_robot_chatmessage")
-
-    conn = _get_connection()
-    try:
-        cursor = conn.cursor()
-
-        if channel:
-            sql = f"""
-                SELECT MSG_DATE, CHANNEL, CONTENT, MSG_TIME,
-                       MSG_SEND_NAME, MSG_SEND_CODE, TRADERIVAL_NAME
-                FROM {table}
-                WHERE MSG_DATE = :p_date AND CHANNEL = :p_channel
-                ORDER BY MSG_TIME ASC
-            """
-            cursor.execute(sql, p_date=int(query_date), p_channel=int(channel))
-        else:
-            sql = f"""
-                SELECT MSG_DATE, CHANNEL, CONTENT, MSG_TIME,
-                       MSG_SEND_NAME, MSG_SEND_CODE, TRADERIVAL_NAME
-                FROM {table}
-                WHERE MSG_DATE = :p_date
-                ORDER BY CHANNEL ASC, MSG_TIME ASC
-            """
-            cursor.execute(sql, p_date=int(query_date))
-
-        return [_row_to_dict(cursor, row) for row in cursor.fetchall()]
-    finally:
-        conn.close()
-
-
-def fetch_all_channels(query_date: str) -> dict[str, list[dict]]:
-    """按频道分组获取所有 QT 聊天消息。
-
-    Returns:
-        {"森浦QT": [...], "通达信QT": [...], "快确QT": [...]}
-    """
-    cfg = _get_config()
-    channels = cfg.get("channels", {"1": "森浦QT", "3": "通达信QT", "4": "快确QT"})
-
-    result: dict[str, list[dict]] = {}
-    conn = _get_connection()
-    try:
-        cursor = conn.cursor()
-        table = cfg.get("comment_table", "ats.t_repo_robot_chatmessage")
-
-        sql = f"""
-            SELECT MSG_DATE, CHANNEL, CONTENT, MSG_TIME,
-                   MSG_SEND_NAME, MSG_SEND_CODE, TRADERIVAL_NAME
-            FROM {table}
-            WHERE MSG_DATE = :p_date
-            ORDER BY CHANNEL ASC, MSG_TIME ASC
-        """
-        cursor.execute(sql, p_date=int(query_date))
-
-        for row in cursor.fetchall():
-            record = _row_to_dict(cursor, row)
-            ch_id = str(record.get("CHANNEL", ""))
-            ch_name = channels.get(ch_id, f"未知频道({ch_id})")
-            if ch_name not in result:
-                result[ch_name] = []
-            result[ch_name].append(record)
-    finally:
-        conn.close()
-
-    return result
-
-
-def categorize_messages(messages: list[dict]) -> dict[str, list[dict]]:
-    """将聊天消息按市场类型分类（关键词匹配）。
-
-    分类规则：
-    - 资金面：回购、资金、头寸、融出、融入、R001/R007/DR001/DR007、利率、加权等
-    - 现券：现券、债券、买券/卖券、收益率、估值、成交、活跃券、国债、政金债等
-    - 一级发行：一级、发行、投标、新债、招标、结果、边际、倍率等
-
-    Returns:
-        {"资金面": [...], "现券": [...], "一级发行": [...], "其他": [...]}
-    """
-    categories: dict[str, list[str]] = {
-        "资金面": [
-            "回购", "资金", "头寸", "融出", "融入", "R001", "R007",
-            "DR001", "DR007", "利率", "加权", "平头寸", "借钱", "出钱",
-            "紧张", "宽松", "央行", "逆回购", "MLF", "OMO", "投放", "回笼",
-        ],
-        "现券": [
-            "现券", "债券", "买券", "卖券", "收益率", "估值", "成交",
-            "活跃券", "国债", "政金债", "信用债", "城投", "地产债",
-            "下行", "上行", "BP", "YTM", "久期", "利差",
-        ],
-        "一级发行": [
-            "一级", "发行", "投标", "新债", "招标", "结果", "边际",
-            "倍率", "募", "计划发行", "实际发行", "全场倍", "边际倍",
-        ],
-    }
-
-    result: dict[str, list[dict]] = {
-        "资金面": [],
-        "现券": [],
-        "一级发行": [],
-        "其他": [],
-    }
-
-    for msg in messages:
-        content = str(msg.get("CONTENT", ""))
-        if not content.strip():
-            continue
-
-        matched = False
-        for cat_name, keywords in categories.items():
-            for kw in keywords:
-                if kw in content:
-                    result[cat_name].append(msg)
-                    matched = True
-                    break
-            if matched:
-                break
-
-        if not matched:
-            result["其他"].append(msg)
-
-    return result
-
-
 def _format_time(time_val) -> str:
     """将 MSG_TIME 整数转为 HH:MM:SS 字符串。
 
-    MSG_TIME 存储为 9 位整数，格式 HHMMSSfff（fff=毫秒）。
-    例如：141704000 → 14:17:04，930150000 → 09:30:15
+    MSG_TIME 存储为 9 位整数 HHMMSSfff（fff=毫秒），不足 9 位时无前导 0。
+    例如：141704000 → 14:17:04，93015000 → 09:30:15。
     """
     if not time_val:
         return ""
     try:
         t = int(time_val)
         s = f"{t:09d}"  # 补齐 9 位
-        hour = int(s[0:2])
-        minute = int(s[2:4])
-        second = int(s[4:6])
-        return f"{hour:02d}:{minute:02d}:{second:02d}"
+        return f"{int(s[0:2]):02d}:{int(s[2:4]):02d}:{int(s[4:6]):02d}"
     except (ValueError, TypeError):
         return str(time_val)
 
 
-def fetch_and_categorize(query_date: str) -> dict[str, Any]:
-    """一站式：获取 QT 消息并分类，返回报告所需结构。
+# 日评召回关键词（findings.md 验证：日评/早评/午评 已穷尽；禁用 %评% 会命中「评级」噪音）
+_RECALL_KEYWORDS = ("日评", "早评", "午评")
+
+
+def _extract_title(content: str) -> str:
+    """取日评标题：首个换行前的内容，截前 40 字。"""
+    first = content.strip().split("\n", 1)[0].strip()
+    return first[:40]
+
+
+def _classify_theme(title: str) -> str:
+    """按日评标题分主题（标题是机构写的明确分类，比正文关键词可靠）。"""
+    if any(w in title for w in ("资金", "货币市场", "存单")):
+        return "资金"
+    if any(w in title for w in ("利率债", "国债", "现券", "信用债")):
+        return "现券"
+    if any(w in title for w in ("一级", "发行", "新债")):
+        return "一级"
+    return "其他"
+
+
+def _detect_session(content: str) -> str:
+    """判定时段：早评/午评/日评。"""
+    if "早评" in content:
+        return "早评"
+    if "午评" in content:
+        return "午评"
+    return "日评"
+
+
+def fetch_daily_commentary(query_date: str) -> dict[str, Any]:
+    """召回当日市场日评，按原文去重，按标题分主题，选代表篇。
+
+    流程：SQL 层 LIKE 召回（日评/早评/午评）→ 按 CONTENT 原文完全相同去重
+    （跨频道同篇逐字一致）→ 按标题分主题 → 每主题选最长（最全）作代表篇。
 
     Returns:
         {
-            "channels": {"森浦QT": N条, ...},
-            "资金面": {"count": N, "messages": [...]},
-            "现券": {"count": N, "messages": [...]},
-            "一级发行": {"count": N, "messages": [...]},
-            "其他": {"count": N, "messages": [...]},
-            "total": 总条数,
+            "total": 去重后独立日评数,
+            "total_raw": 召回原始命中（含跨频道重复）,
+            "reports": [ {content, sender, time, channel, title, theme, session}, ... ],
+            "representative": { "资金": report|None, "现券": report|None },
         }
     """
-    all_messages = fetch_all_channels(query_date)
+    cfg = _get_config()
+    table = cfg.get("comment_table", "ats.t_repo_robot_chatmessage")
 
-    # 统计各频道数量
-    channel_stats = {name: len(msgs) for name, msgs in all_messages.items()}
+    like_clause = " OR ".join(
+        f"CONTENT LIKE :kw{i}" for i in range(len(_RECALL_KEYWORDS))
+    )
+    binds = {f"kw{i}": f"%{kw}%" for i, kw in enumerate(_RECALL_KEYWORDS)}
 
-    # 合并所有消息后分类
-    all_msgs_flat: list[dict] = []
-    for msgs in all_messages.values():
-        all_msgs_flat.extend(msgs)
+    conn = _get_connection()
+    try:
+        cursor = conn.cursor()
+        sql = (
+            f"SELECT CONTENT, MSG_SEND_NAME, MSG_TIME, CHANNEL FROM {table} "
+            f"WHERE MSG_DATE = :p_date AND ({like_clause}) ORDER BY MSG_TIME"
+        )
+        cursor.execute(sql, p_date=int(query_date), **binds)
+        rows = [_row_to_dict(cursor, row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
 
-    categorized = categorize_messages(all_msgs_flat)
+    total_raw = len(rows)
 
-    # 提取关键信息（截断过长消息，统一字段名）
-    def _extract(msgs: list[dict], max_items: int = 30) -> list[dict]:
-        extracted = []
-        for msg in msgs[:max_items]:
-            content = str(msg.get("CONTENT", ""))
-            if len(content) > 500:
-                content = content[:500] + "..."
-            extracted.append({
-                "channel": str(msg.get("CHANNEL", "")),
-                "time": _format_time(msg.get("MSG_TIME", "")),
-                "sender": msg.get("MSG_SEND_NAME", msg.get("MSG_SEND_CODE", "")),
-                "content": content,
-            })
-        return extracted
+    # 按 CONTENT 原文完全相同去重（跨频道同篇逐字一致）
+    seen: set[str] = set()
+    reports: list[dict[str, Any]] = []
+    for row in rows:
+        content = str(row.get("CONTENT") or "").strip()
+        if not content or content in seen:
+            continue
+        seen.add(content)
+        title = _extract_title(content)
+        reports.append({
+            "content": content,
+            "sender": str(row.get("MSG_SEND_NAME") or "").strip(),
+            "time": _format_time(row.get("MSG_TIME")),
+            "channel": str(row.get("CHANNEL") or ""),
+            "title": title,
+            "theme": _classify_theme(title),
+            "session": _detect_session(content),
+        })
+
+    # 每主题选最长（最全）作代表篇
+    representative: dict[str, dict[str, Any] | None] = {"资金": None, "现券": None}
+    for theme in representative:
+        candidates = [r for r in reports if r["theme"] == theme]
+        if candidates:
+            representative[theme] = max(candidates, key=lambda r: len(r["content"]))
 
     return {
-        "channels": channel_stats,
-        "资金面": {
-            "count": len(categorized["资金面"]),
-            "messages": _extract(categorized["资金面"]),
-        },
-        "现券": {
-            "count": len(categorized["现券"]),
-            "messages": _extract(categorized["现券"]),
-        },
-        "一级发行": {
-            "count": len(categorized["一级发行"]),
-            "messages": _extract(categorized["一级发行"]),
-        },
-        "其他": {
-            "count": len(categorized["其他"]),
-            "messages": _extract(categorized["其他"], max_items=10),
-        },
-        "total": len(all_msgs_flat),
+        "total": len(reports),
+        "total_raw": total_raw,
+        "reports": reports,
+        "representative": representative,
     }

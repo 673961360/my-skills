@@ -153,18 +153,19 @@ def main():
     print(f"  交易日判断：{trading_status}")
     print(f"  O32指令数：{len(data.get('_instructions', []))}")
     print(f"  头寸记录数：{len(data.get('_positions', []))}")
-    print(f"  交收记录数：{len(data.get('_settlement_rows', []))}")
+    print(f"  应急回购数：{len(data.get('_emergency_rows', []))}")
     print(f"  风险预警数：{len(data.get('risk_warnings', []))}")
     print(f"  权益短评：{'外部输入' if data['equity_market']['available'] else data['equity_market']['commentary']}")
 
     qt = data.get("qt_commentary", {})
     if qt.get("total"):
-        print(f"  QT短评总数：{qt['total']}")
-        for ch_name, ch_count in qt.get("channels", {}).items():
-            print(f"    - {ch_name}: {ch_count} 条")
-        for cat_name in ["资金面", "现券", "一级发行"]:
-            cat_data = qt.get(cat_name, {})
-            print(f"    {cat_name}: {cat_data.get('count', 0)} 条")
+        print(f"  QT日评：召回 {qt.get('total_raw', 0)} 条 → 去重 {qt['total']} 篇")
+        for theme in ("资金", "现券"):
+            rep = qt.get("representative", {}).get(theme)
+            if rep:
+                print(f"    {theme}代表篇：{rep.get('sender', '')} · {rep.get('time', '')} · {rep.get('title', '')[:30]}")
+            else:
+                print(f"    {theme}代表篇：无")
 
     # Step 3: 生成图表
     print(f"\n[3/4] 正在生成图表...")
