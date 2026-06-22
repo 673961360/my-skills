@@ -191,6 +191,7 @@ def render_forecast_sample_report() -> str:
             "VOLUME": "800",
         },
     ]
+    data["market_forecast"] = build_market_forecast(data["repo_rates"], {}, data["market_commentary"])
     charts = {"repo_rate": "REPO_RATE_CHART"}
     return render_report(data, charts=charts)
 
@@ -329,6 +330,23 @@ class TemplateContractTest(unittest.TestCase):
         self.assertEqual([], forecast["indicators"])
         self.assertIn("资金利率", forecast["methodology"])
         self.assertIn("债券收益率曲线", forecast["methodology"])
+
+    def test_market_forecast_builds_explainable_prediction_from_repo_rates(self):
+        forecast = build_market_forecast(
+            [
+                {"SECURITY_NAME": "R001", "LAST_PRICE": "2.05", "HIGH_PRICE": "2.25", "LOW_PRICE": "1.85"},
+                {"SECURITY_NAME": "R007", "LAST_PRICE": "2.30", "HIGH_PRICE": "2.45", "LOW_PRICE": "2.10"},
+            ],
+            {"has_data": True, "omo_net_inject": -200, "gov_bond_payment": 300},
+            {"funding": "资金面偏紧，融入需求较多。", "bond": "现券收益率上行，OFR 增多。"},
+        )
+
+        self.assertTrue(forecast["available"])
+        self.assertIn("资金面预测", forecast["conclusion"])
+        self.assertIn("现券市场预测", forecast["conclusion"])
+        self.assertIn("规则评分法", forecast["methodology"])
+        self.assertGreaterEqual(len(forecast["indicators"]), 5)
+        self.assertIn("O32 回购行情 cat_sql_trade_0012", forecast["sources"])
 
     def test_header_uses_reference_date_format(self):
         html = render_sample_report()
@@ -540,7 +558,10 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("预测结论", forecast_html)
         self.assertIn("关键指标", forecast_html)
         self.assertIn("方法说明", forecast_html)
-        self.assertIn("预测指标来源尚未确认", forecast_html)
+        self.assertIn("资金面预测", forecast_html)
+        self.assertIn("R001 最新利率", forecast_html)
+        self.assertIn("O32 回购行情 cat_sql_trade_0012", forecast_html)
+        self.assertNotIn("预测指标来源尚未确认", forecast_html)
         self.assertNotIn("趋势预测准确率", forecast_html)
         self.assertNotIn("区间预测准确率", forecast_html)
         self.assertEqual(1, forecast_html.count('<div class="section">'))

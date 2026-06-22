@@ -51,6 +51,7 @@ Authorization: Bearer <API_KEY>
 
 | 接口ID | 名称 | 方法 | Body 类型 | 操作类型 | 风险等级 |
 |--------|------|------|-----------|----------|----------|
+| cat_api_trade_0008 | 查询实时正回购询价结果 | POST | json | 只读 | - |
 | cat_api_trade_0021 | 进度汇总查询 | POST | json | 只读 | - |
 | cat_api_trade_0022 | 头寸预测查询 | POST | form | 只读 | - |
 

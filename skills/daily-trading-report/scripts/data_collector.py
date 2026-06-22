@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from api_client import call_sql_api, call_api, call_form_api
+from desensitize import mask_product_fields
 
 
 def _parse_date(date_str: str | None) -> str:
@@ -38,15 +39,150 @@ def _weekday_name(date_str: str) -> str:
     return days[dt.weekday()]
 
 
+def _as_float(value: Any) -> float | None:
+    try:
+        if value in (None, ""):
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def build_market_forecast(repo_rates: list[dict], money_market: dict, market_commentary: dict) -> dict:
-    """Build the market forecast contract without inventing unavailable indicators."""
+    """Build an explainable market forecast from available deterministic indicators."""
+    indicators: list[dict[str, str]] = []
+    funding_score = 0.0
+    bond_score = 0.0
+
+    for rate in repo_rates[:6]:
+        name = str(rate.get("SECURITY_NAME") or rate.get("SECURITY_CODE") or "").strip()
+        latest = _as_float(rate.get("LAST_PRICE", rate.get("LATEST_PRICE")))
+        high = _as_float(rate.get("HIGH_PRICE"))
+        low = _as_float(rate.get("LOW_PRICE"))
+        if not name or latest is None:
+            continue
+
+        indicators.append({
+            "name": f"{name} 最新利率",
+            "value": f"{latest:.2f}%",
+            "source": "O32 回购行情 cat_sql_trade_0012",
+        })
+        if name in {"R001", "DR001"}:
+            if latest >= 2.0:
+                funding_score += 1.0
+            elif latest <= 1.5:
+                funding_score -= 1.0
+        elif name in {"R007", "DR007"}:
+            if latest >= 2.2:
+                funding_score += 1.0
+            elif latest <= 1.7:
+                funding_score -= 1.0
+
+        if high is not None and low is not None and high - low >= 0.3:
+            funding_score += 0.5
+
+    if money_market.get("has_data"):
+        omo_net = _as_float(money_market.get("omo_net_inject")) or 0.0
+        gov_pay = _as_float(money_market.get("gov_bond_payment")) or 0.0
+        indicators.append({
+            "name": "OMO 净投放",
+            "value": f"{omo_net:.2f} 亿元",
+            "source": "资金事件日历 cat_sql_trade_0013",
+        })
+        indicators.append({
+            "name": "政府债缴款",
+            "value": f"{gov_pay:.2f} 亿元",
+            "source": "资金事件日历 cat_sql_trade_0013",
+        })
+        if omo_net > 0:
+            funding_score -= 1.0
+        elif omo_net < 0:
+            funding_score += 1.0
+        if gov_pay > 0:
+            funding_score += 1.0
+        elif gov_pay < 0:
+            funding_score -= 0.5
+
+    funding_text = str(market_commentary.get("funding", ""))
+    if funding_text and funding_text != "暂无有效消息":
+        if any(word in funding_text for word in ["偏紧", "紧张", "资金难借"]):
+            funding_score += 1.0
+            sentiment = "偏紧"
+        elif any(word in funding_text for word in ["宽松", "融出意愿较强"]):
+            funding_score -= 1.0
+            sentiment = "偏松"
+        else:
+            sentiment = "均衡"
+        indicators.append({
+            "name": "QT 资金面情绪",
+            "value": sentiment,
+            "source": "QT 资金面短评",
+        })
+
+    bond_text = str(market_commentary.get("bond", ""))
+    if bond_text and bond_text != "暂无有效消息":
+        if any(word in bond_text for word in ["收益率上行", "走弱", "卖方", "OFR"]):
+            bond_score += 1.0
+            bond_sentiment = "偏弱"
+        elif any(word in bond_text for word in ["收益率下行", "走强", "买方", "BID"]):
+            bond_score -= 1.0
+            bond_sentiment = "偏强"
+        else:
+            bond_sentiment = "中性"
+        indicators.append({
+            "name": "QT 现券情绪",
+            "value": bond_sentiment,
+            "source": "QT 现券短评",
+        })
+
+    if not indicators:
+        return {
+            "available": False,
+            "conclusion": "预测指标来源尚未确认",
+            "indicators": [],
+            "methodology": "资金利率、公开市场操作、债券收益率曲线和 QT 情绪等预测指标尚未完成来源确认，暂不生成方向性预测。",
+            "sources": [],
+            "reason": "当前预测指标数据源尚未完成映射，暂不生成方向性预测。",
+        }
+
+    if funding_score >= 1.5:
+        funding_view = "偏紧"
+        funding_detail = "资金价格或流动性扰动信号占优，明日资金面需按偏紧情形准备。"
+    elif funding_score <= -1.5:
+        funding_view = "偏松"
+        funding_detail = "流动性投放或资金价格低位信号占优，明日资金面预计偏松。"
+    else:
+        funding_view = "均衡"
+        funding_detail = "利率、公开市场和交易员情绪信号未形成单边压力，明日资金面预计维持均衡。"
+
+    bond_score += max(min(funding_score / 2, 1.0), -1.0)
+    if bond_score >= 1.0:
+        bond_view = "收益率上行压力略大"
+        bond_detail = "资金面约束或现券卖压信号偏强，利率债交易宜控制久期暴露。"
+    elif bond_score <= -1.0:
+        bond_view = "收益率下行机会略占优"
+        bond_detail = "资金面支持或现券买盘信号偏强，利率债情绪预计偏暖。"
+    else:
+        bond_view = "震荡"
+        bond_detail = "资金和现券信号分化，收益率方向暂不具备强趋势。"
+
+    conclusion = (
+        f"资金面预测：下一交易日资金面预计{funding_view}，{funding_detail}\n"
+        f"现券市场预测：利率债预计{bond_view}，{bond_detail}\n"
+        "风险提示：央行公开市场操作、政府债缴款、跨季/月末扰动和海外利率变化可能改变上述判断。"
+    )
+    methodology = (
+        "采用规则评分法：短端回购利率高位、OMO 净回笼、政府债缴款增加、QT 资金面偏紧均提高资金面偏紧评分；"
+        "流动性投放、短端利率低位和 QT 宽松表述降低偏紧评分。现券方向在资金面评分基础上叠加 QT 现券情绪，"
+        "形成收益率上行、下行或震荡判断。缺少外部收益率曲线和活跃券成交时，现券预测只作为低置信度方向判断。"
+    )
     return {
-        "available": False,
-        "conclusion": "预测指标来源尚未确认",
-        "indicators": [],
-        "methodology": "资金利率、公开市场操作、债券收益率曲线和 QT 情绪等预测指标尚未完成来源确认，暂不生成方向性预测。",
-        "sources": [],
-        "reason": "当前预测指标数据源尚未完成映射，暂不生成方向性预测。",
+        "available": True,
+        "conclusion": conclusion,
+        "indicators": indicators,
+        "methodology": methodology,
+        "sources": sorted({indicator["source"] for indicator in indicators}),
+        "reason": "",
     }
 
 
@@ -81,10 +217,11 @@ def build_equity_market_analysis(commentary: str | None = None) -> dict:
 def collect_trade_instructions(query_date: str) -> list[dict]:
     """采集 O32 交易指令数据（cat_sql_trade_0019）。
 
-    返回原始指令列表。
+    返回指令列表（产品代码/名称已脱敏，供后续聚合与大模型分析）。
     """
     result = call_sql_api("cat_sql_trade_0019", {"queryDate": int(query_date)})
-    return result.get("body", [])
+    records = result.get("body", [])
+    return [mask_product_fields(r) for r in records]
 
 
 def collect_position_data() -> list[dict]:
