@@ -89,24 +89,6 @@ def _funding_condition(text: str) -> str:
         return "均衡"
     return "均衡"
 
-
-def _fmt_money_amount(value: float | None) -> str:
-    if value is None:
-        return "\\"
-    if abs(value - round(value)) < 0.005:
-        return f"{value:.0f}"
-    return f"{value:.2f}"
-
-
-def _fmt_net_inject(value: float | None) -> str:
-    if value is None:
-        return "\\"
-    sign = "+" if value > 0 else ""
-    if abs(value - round(value)) < 0.005:
-        return f"{sign}{value:.0f}"
-    return f"{sign}{value:.2f}"
-
-
 def _normalize_omo_project(name: str, term: str) -> str:
     text = f"{name}{term}"
     if "逆回购" in text:
