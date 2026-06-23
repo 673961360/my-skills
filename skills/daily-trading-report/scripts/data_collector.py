@@ -1,8 +1,23 @@
-"""数据采集模块 — 从 AI Gateway API 采集并聚合交易数据。
+"""数据采集模块 — 从机器猫(AI Gateway)、Oracle QT、外部行情采集并聚合日报数据。
 
-采集流程：
-  Phase 1（并行基础数据）：O32指令、头寸、应急回购、回购行情、交易日历
-  Phase 2（补充数据）：对手信息、头寸预测、资金事件
+采集流程（collect_all）：
+  Phase 1（并行基础数据,从机器猫 API 网关）：O32 指令、应急回购、交易日历
+  Phase 2（补充数据,从机器猫 API 网关）：资金事件日历（±3 天窗口）
+  Phase 3（日评与外部行情）：Oracle QT 资金/现券日评、外部市场行情（国债曲线/指数）
+  Phase 4（聚合）：交易汇总、交收、货币市场、一级市场、风险、预测、资金面状况、现券/一级评述
+
+板块产出对应关系：
+  01 交易 ← aggregate_trade_overview / aggregate_trade_count_by_hour / aggregate_trade_amount_by_direction
+  02 交收 ← aggregate_emergency_repo
+  03 预测 ← build_market_forecast（融合 OMO + QT 情绪 + 国债曲线 + 指数）
+  04 OMO ← aggregate_money_market + enrich_omo_rates_from_commentary
+  04 资金面 ← build_funding_market_status
+  现券/一级评述 ← generate_market_commentary + _extract_primary_section
+  权益指数 ← external_market.collect_external_market_indicators
+  权益评述 ← build_equity_market_analysis（占位，由 generate_report 注入）
+  风险 ← aggregate_risk_warnings → build_risk_tips
+
+注：代码中仍采集头寸(collect_position_data)和回购行情(collect_repo_rates)，但当前 SOP 不要求展示。
 """
 
 import json
@@ -56,6 +71,7 @@ def _utc_date_key_to_beijing(utc_key: str) -> str:
 
 
 def _as_float(value: Any) -> float | None:
+    """安全转 float。None/空串/不可转值返回 None，避免下游判断崩溃。"""
     try:
         if value in (None, ""):
             return None
@@ -65,12 +81,14 @@ def _as_float(value: Any) -> float | None:
 
 
 def _fmt_point(value: float | None, digits: int = 2) -> str:
+    """格式化点位数值。None 返回 '暂无相关数据'，否则按指定小数位输出。"""
     if value is None:
         return "暂无相关数据"
     return f"{value:.{digits}f}"
 
 
 def _trend_from_score(score: float, up_label: str = "上行", down_label: str = "下行") -> str:
+    """打分 → 趋势方向。score ≥ 1.0 上行；≤ −1.0 下行；否则持平。"""
     if score >= 1.0:
         return up_label
     if score <= -1.0:
@@ -79,6 +97,7 @@ def _trend_from_score(score: float, up_label: str = "上行", down_label: str = 
 
 
 def _funding_condition(text: str) -> str:
+    """从 QT 资金日评文本判资金面状态：不松 / 均衡 / 偏松。空文本返回 '暂无有效消息'。"""
     if not text or text == "暂无有效消息":
         return "暂无有效消息"
     if any(word in text for word in ["不松", "偏紧", "紧张", "转紧", "资金难借", "融入需求"]):
@@ -89,7 +108,9 @@ def _funding_condition(text: str) -> str:
         return "均衡"
     return "均衡"
 
+
 def _normalize_omo_project(name: str, term: str) -> str:
+    """OMO 操作品种名归一化（逆回购/MLF/买断式/国库定存），用于 OMO 表展示。"""
     text = f"{name}{term}"
     if "逆回购" in text:
         if "7" in text:
@@ -105,6 +126,7 @@ def _normalize_omo_project(name: str, term: str) -> str:
 
 
 def _forecast_point(current: float | None, trend: str, step: float, digits: int = 2) -> str:
+    """按趋势方向外推点位：上行 +step、下行 −step、持平保持。None 返回 '\\'。"""
     if current is None:
         return "\\"
     if trend == "上行":
@@ -121,7 +143,11 @@ def build_market_forecast(
     external_market: dict | None = None,
     daily_commentary: dict | None = None,
 ) -> dict:
-    """Build the forecast table shown in the reference report."""
+    """生成 03 市场预测汇总表：资金/10Y 国债/上证/创业板/CD 利率/CD 利差五行。
+
+    整体逻辑：多路信号打分 → 阈值判方向 → 当前值 ± 固定步长外推点位。
+    详见 data-sources.md "03 市场预测汇总" 节。
+    """
     indicators: list[dict[str, str]] = []
     rows: list[dict[str, str]] = []
     funding_score = 0.0
@@ -352,11 +378,11 @@ def build_market_forecast(
 
 
 def build_risk_tips(risk_warnings: list[dict]) -> list[str]:
-    """Build fixed compliance tips plus a lightweight dynamic risk summary."""
+    """生成风险提示文案：3 条固定合规免责声明 + 规则引擎识别的动态风险线索。"""
     tips = [
-        "请密切关注明日到期回购资金的安排，提前做好头寸准备。",
-        "关注央行公开市场操作动向，合理安排资金交易节奏。",
-        "注意交易对手集中度风险，分散交易对手以降低信用风险。",
+        "本材料仅供内部参考使用，未经允许不得外发。",
+        "材料中的市场分析和趋势预测等相关信息不构成收益承诺，仅供参考，具体以市场实际行情为准。",
+        "我们力求但不保证材料中信息的准确性和完整性，也不保证材料中观点或陈述不会发生任何变更。",
     ]
     if risk_warnings:
         tips.insert(0, f"今日规则引擎识别到 {len(risk_warnings)} 条风险线索，请优先复核高等级事项。")
@@ -364,7 +390,7 @@ def build_risk_tips(risk_warnings: list[dict]) -> list[str]:
 
 
 def build_equity_market_analysis(commentary: str | None = None) -> dict:
-    """Build equity market analysis from external input or the contract fallback."""
+    """权益评述占位：有外部短评则用，否则返回 fallback（由 generate_report 注入 AI 查询结果）。"""
     text = (commentary or "").strip()
     if text:
         return {
@@ -610,6 +636,7 @@ def aggregate_trade_count_by_hour(instructions: list[dict]) -> dict:
 
 
 def _trade_count_bucket(direction: str) -> str | None:
+    """委托方向 → 笔数统计桶名（现券买入/正回购/权益卖出/分销买入 等 8 类）。"""
     mapping = {
         "债券买入": "现券买入",
         "债券卖出": "现券卖出",
@@ -819,7 +846,7 @@ def aggregate_money_market(events: list[dict], query_date: str = "") -> dict:
     return {
         "data_date": display_date,
         "omo_operations": omo_summary,
-        "omo_summary_rows": sorted(omo_summary_rows, key=lambda x: abs(x["净投放（亿元）"]), reverse=True),
+        "omo_summary_rows": [r for r in sorted(omo_summary_rows, key=lambda x: abs(x["净投放（亿元）"]), reverse=True) if r["项目"] != "国库定存"],
         "omo_net_inject": round(omo_net, 2),
         "bond_maturities": sorted(bond_by_type.values(), key=lambda x: x["到期(亿)"], reverse=True),
         "gov_bond_payment": round(gov_pay, 2),
@@ -1026,6 +1053,7 @@ def _clean_commentary_body(content: str) -> str:
 
 
 def _compact_sentence(text: str, max_len: int = 42) -> str:
+    """压缩句子：去空白，超长截到 max_len 加省略号，空文本返回 '—'。"""
     text = re.sub(r"\s+", "", text or "")
     if not text:
         return "—"
@@ -1033,12 +1061,14 @@ def _compact_sentence(text: str, max_len: int = 42) -> str:
 
 
 def _split_commentary_sentences(text: str) -> list[str]:
+    """日评正文按 。；!?\n 分句，去空去标点尾缀。"""
     cleaned = _clean_commentary_body(text)
     parts = re.split(r"[。；;！!？?\n]+", cleaned)
     return [p.strip(" ：:，,、") for p in parts if p.strip(" ：:，,、")]
 
 
 def _pick_sentence(sentences: list[str], keywords: tuple[str, ...]) -> str:
+    """从句子列表里挑第一条含关键词的，过滤标题句和央行操作噪音句。"""
     for sentence in sentences:
         if re.search(r"(资金|存单).{0,8}(早评|午评|日评)", sentence):
             continue
@@ -1070,6 +1100,7 @@ def _rate_fragment(sentences: list[str], keywords: tuple[str, ...]) -> str:
 
 
 def _session_rank(report: dict) -> int:
+    """日评 → 时段序号：0=早评、2=午评、4=日评/尾盘；按 session/title/content/发送时间启发式判定。"""
     session = str(report.get("session", ""))
     title = str(report.get("title", ""))
     time_val = str(report.get("time", ""))
@@ -1096,6 +1127,7 @@ def _session_rank(report: dict) -> int:
 
 
 def _period_name(rank: int) -> str:
+    """时段序号 → 显示名：0=早盘(开盘)、1=OMO操作后、2=午前、3=午后(初)、4=尾盘。"""
     return {
         0: "早盘（开盘）",
         1: "OMO操作后",
@@ -1106,6 +1138,7 @@ def _period_name(rank: int) -> str:
 
 
 def _period_from_sentence(sentence: str) -> str | None:
+    """句子含时段关键词则返回对应时段名，否则 None（触发状态机继承上一时标）。"""
     if "公开市场操作后" in sentence or "OMO操作后" in sentence or "OMO后" in sentence:
         return "OMO操作后"
     if "早盘" in sentence or "开盘" in sentence:
@@ -1120,6 +1153,7 @@ def _period_from_sentence(sentence: str) -> str | None:
 
 
 def _market_status_from_text(text: str) -> str:
+    """文本 → 市场状态关键词优先级判定：偏紧 > 偏松 > 收敛 > 均衡 > '—'。"""
     if any(word in text for word in ("偏紧", "收紧", "转紧", "紧张", "融出减少", "融入困难")):
         return "偏紧"
     if any(word in text for word in ("偏松", "转松", "宽松", "融出充足")):
@@ -1132,6 +1166,7 @@ def _market_status_from_text(text: str) -> str:
 
 
 def enrich_omo_rates_from_commentary(money_market: dict, daily_commentary: dict) -> dict:
+    """用 QT 日评中提到的 OMO 操作利率回填 aggregate_money_market 空着的利率列。"""
     rows = money_market.get("omo_summary_rows") or []
     if not rows or all(row.get("利率") not in ("", "\\", "—") for row in rows):
         return money_market
@@ -1247,7 +1282,7 @@ def build_funding_market_status(daily_commentary: dict, fallback_text: str = "")
     if period_count < 2:
         cleaned = _clean_commentary_body(all_text)
         raw = (
-            f"<!-- ⚠️ 中间态：以下为 QT 日评原文 dump，待 Claude 精炼 → 禁止直接交付 -->\n[待精炼]\n{cleaned}"
+            f"<!-- ⚠️ 中间态[资金]：以下为 QT 日评原文 dump，待 Claude 精炼 → 禁止直接交付 -->\n[待精炼]\n{cleaned}"
             if cleaned.strip() else ""
         )
         return {
@@ -1260,7 +1295,7 @@ def build_funding_market_status(daily_commentary: dict, fallback_text: str = "")
     sentiment_index = _extract_sentiment_index(all_text)
     cleaned = _clean_commentary_body(all_text)
     raw = (
-        f"<!-- ⚠️ 中间态：以下为 QT 日评原文 dump，待 Claude 精炼 → 禁止直接交付 -->\n[待精炼]\n{cleaned}"
+        f"<!-- ⚠️ 中间态[资金]：以下为 QT 日评原文 dump，待 Claude 精炼 → 禁止直接交付 -->\n[待精炼]\n{cleaned}"
         if cleaned.strip() else ""
     )
 
@@ -1303,11 +1338,12 @@ def generate_market_commentary(daily_commentary: dict) -> dict[str, str]:
     """
     rep = (daily_commentary or {}).get("representative") or {}
 
-    def _render(theme_report: dict | None) -> str:
+    def _render(theme_report: dict | None, section: str = "") -> str:
         if not theme_report:
             return "暂无有效消息"
         body = _clean_commentary_body(str(theme_report.get("content", "")))
-        return f"<!-- ⚠️ 中间态：以下为 QT 日评原文 dump，待 Claude 精炼 → 禁止直接交付 -->\n[待精炼]\n{body}"
+        tag = f"[{section}]" if section else ""
+        return f"<!-- ⚠️ 中间态{tag}：以下为 QT 日评原文 dump，待 Claude 精炼 → 禁止直接交付 -->\n[待精炼]\n{body}"
 
     # 一级：从资金日评的【一级简评】小节提取
     # 代表篇不一定含【一级简评】（如午评无此小节），回退搜索所有资金类去重篇
@@ -1324,13 +1360,13 @@ def generate_market_commentary(daily_commentary: dict) -> dict[str, str]:
             break
 
     if primary_body and primary_source_report:
-        primary = f"<!-- ⚠️ 中间态：以下为【一级简评】原文 dump，待 Claude 精炼 -->\n[待精炼]\n{primary_body}"
+        primary = f"<!-- ⚠️ 中间态[一级]：以下为【一级简评】原文 dump，待 Claude 精炼 -->\n[待精炼]\n{primary_body}"
     else:
         primary = "暂无有效消息"
 
     return {
-        "funding": _render(rep.get("资金")),
-        "bond": _render(rep.get("现券")),
+        "funding": _render(rep.get("资金"), "资金"),
+        "bond": _render(rep.get("现券"), "现券"),
         "primary": primary,
     }
 
