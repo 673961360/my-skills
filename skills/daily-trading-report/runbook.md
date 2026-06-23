@@ -36,6 +36,18 @@ uv run python scripts/export_data.py --use-cache
 - **只缓存 AI Gateway API 响应**，Oracle QT 和外部行情仍实时请求
 - 参数变了（如换日期）会自动调 API 补缓存
 
+### 生成历史日报
+
+测试环境 O32/API 接口**不支持查询历史日期数据**（返回 0 条，非报错），因此生成历史日报必须使用 `cache/` 中已有的缓存文件：
+
+```bash
+uv run python scripts/generate_report.py --date {YYYYMMDD} --use-cache
+```
+
+- **缓存来源**：当日首次运行（不带 `--use-cache`）时，API 响应自动落盘到 `cache/`；后续同日期查询直接读缓存
+- **限制**：`cache/` 中无对应日期的缓存时，历史日期无法生成有效数据（接口不返回历史）
+- Oracle QT 短评不受此限制（历史数据完整），但仍需 `--use-cache` 避免重复请求
+
 ## 环境依赖
 
 | 依赖 | 说明 |
@@ -56,13 +68,13 @@ uv run python scripts/export_data.py --use-cache
    - **现券市场分析**：QT 现券日评原文 dump 由脚本填入（**中间态**），按 `prompts/bond-commentary.md` 精炼为 3-5 句，剔除 OMO/资金面/一级（他栏已有）；QT 无现券日评才 WebSearch "YYYY年M月D日 债券 利率债 收盘"
    - **权益市场分析**：按 `prompts/stock-commentary.md` 的查询策略（域名限定优先，非精确日期长句）WebSearch 当日 A 股收盘，整合为成交额/板块/驱动的**增量判断**（指数点位引用上方表格，不复述）
    - **资金市场分析**：QT 资金日评原文 dump 已由脚本填入，按 `prompts/funding-commentary.md` 精炼为 3-5 句判断性总结（若模板已含 QT 原文则无需额外搜索）
-   - **一级市场分析**：发行卡 + 明细表由脚本自动填充（`aggregate_primary_market`），**无需精炼**
+   - **一级市场分析**：发行卡 + 明细表由脚本自动填充（`aggregate_primary_market`）；若资金日评含【一级简评】→ 按 `prompts/primary-commentary.md` 精炼为 3-5 句判断性总结
    - 注入方式：直接 `Edit` HTML 文件替换占位文本
    - **注入后逐栏检查（中间态→成品，每栏必过）**：
-     - [ ] 资金面状况：是原文 dump（非表格）→ 按 `prompts/funding-commentary.md` 精炼；已是时段表 → 过
+     - [ ] 资金面状况：表格后 `analysis-box` 是原文 dump → 按 `prompts/funding-commentary.md` 精炼为整体状态 + 市场特征总结；已是 `整体状态：...` 格式 → 过
      - [ ] 现券市场分析：不得留 QT 原文 dump（含日评标题/逐条成交/OMO/Shibor/一级）→ 按 `prompts/bond-commentary.md` 精炼
      - [ ] 权益市场分析：不得是"外部短评暂未获取"，也不得复述指数表点位 → 按 `prompts/stock-commentary.md` 补成交额/板块/驱动
-     - [ ] 一级市场分析：脚本自动（卡片+明细表）→ 过
+     - [ ] 一级市场分析：有【一级简评】原文 dump → 按 `prompts/primary-commentary.md` 精炼；仅表格无文字 → 过
 4. **检查结果**：
    - 成功 → 读取 HTML，向用户展示摘要
    - 失败 → 根据错误信息排查（见下方错误表）

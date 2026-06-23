@@ -527,8 +527,8 @@
           <td class="text-right">{{ "%.2f"|format(val.买入金额 / 100000000) if val.买入金额 else "\\" }}</td>
           <td class="text-right">{{ "%.2f"|format(val.卖出金额 / 100000000) if val.卖出金额 else "\\" }}</td>
           <td>
-            {% if trade_overview.总指令金额 > 0 %}
-              {{ "%.1f%%"|format(row_amount / trade_overview.总指令金额 * 100) }}
+            {% if trade_overview.总成交金额 > 0 %}
+              {{ "%.1f%%"|format(row_amount / trade_overview.总成交金额 * 100) }}
             {% else %}
               —
             {% endif %}
@@ -548,10 +548,8 @@
   <div class="section">
     <div class="section-title"><span class="icon">02</span> 交收数据汇总</div>
 
-    <div class="template-subtitle">交收数据汇总</div>
-
     {% if emergency_repo.has_data %}
-    <p class="muted-note">今日应急金额为{{ "%.0f"|format(emergency_repo.总金额万元) }}万元</p>
+    <p>今日应急金额为{{ "%.0f"|format(emergency_repo.总金额万元) }}万元</p>
 
     <table>
       <thead>
@@ -625,6 +623,11 @@
 
     <p class="muted-note">填写人：{{ funding_market_status.writer | default("自动") }}</p>
 
+    {% if funding_market_status.overall %}
+    <div class="inline-heading">▶整体状态</div>
+    <div class="analysis-box">{{ funding_market_status.overall }}</div>
+    {% endif %}
+
     <div class="inline-heading">▶公开市场操作{% if money_market.has_data %}（{{ money_market.data_date }}）{% endif %}</div>
 
     {% if money_market.has_data and money_market.omo_summary_rows %}
@@ -658,10 +661,6 @@
 
     <div class="inline-heading">▶资金面状况</div>
     {% if funding_market_status.available %}
-    <ul class="kv-list">
-      <li><strong>整体状态：</strong>{{ funding_market_status.overall }}</li>
-      <li><strong>利率走势：</strong>{{ funding_market_status.rate_trend }}</li>
-    </ul>
     <table>
       <thead>
         <tr>
@@ -684,9 +683,18 @@
         {% endfor %}
       </tbody>
     </table>
+    {% if funding_market_status.sentiment_index %}
     <ul class="kv-list">
-      <li><strong>小结：</strong>{{ funding_market_status.summary }}</li>
+      <li><strong>情绪指数：</strong>{{ funding_market_status.sentiment_index }}</li>
     </ul>
+    {% endif %}
+    {% if funding_market_status.summary %}
+    <div class="inline-heading">▶市场特征总结</div>
+    <div class="analysis-box">{{ funding_market_status.summary }}</div>
+    {% endif %}
+    {% if not funding_market_status.overall and not funding_market_status.summary %}
+    <div class="analysis-box">{{ funding_market_status.raw_text }}</div>
+    {% endif %}
     {% else %}
     <div class="analysis-box">{{ funding_market_status.fallback | default(market_commentary.funding) }}</div>
     {% endif %}
@@ -718,7 +726,6 @@
       {% endfor %}
       </tbody>
     </table>
-    <p class="muted-note">数据来源：{{ equity_indices.source }}</p>
     {% endif %}
     {% if equity_market.available %}
     <div class="analysis-box">{{ equity_market.commentary }}</div>
@@ -735,10 +742,10 @@
     {% if primary_market.available %}
     <div class="inline-heading">发行情况{% if primary_market.data_date %}（{{ primary_market.data_date }}）{% endif %}</div>
     <div class="summary-cards">
-      {% if primary_market.totals.NCD > 0 %}
+      {% if primary_market.ncd_next_day_pre > 0 %}
       <div class="summary-card">
-        <div class="label">总募集量</div>
-        <div class="value small">{{ "%.0f"|format(primary_market.totals.NCD) }}<span class="unit">亿</span></div>
+        <div class="label">NCD 预发行</div>
+        <div class="value small">{{ "%.1f"|format(primary_market.ncd_next_day_pre) }}<span class="unit">亿</span></div>
       </div>
       {% endif %}
       {% if primary_market.totals.利率债 > 0 %}
@@ -764,6 +771,9 @@
       {% endfor %}
       </tbody>
     </table>
+    {% endif %}
+    {% if market_commentary.primary and market_commentary.primary != '暂无有效消息' %}
+    <div class="analysis-box">{{ market_commentary.primary }}</div>
     {% endif %}
     {% elif qt_commentary.get('一级发行', {}).get('count', 0) > 0 %}{# ⚠️ 死代码：db_client.fetch_daily_commentary 的 representative 仅装 资金/现券，不产出「一级发行」key，此分支恒不触发，实际降级走下方 else。详见 data-sources.md「一级市场分析·链路断点」。 #}
     <div class="inline-heading">发行情况</div>

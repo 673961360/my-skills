@@ -12,20 +12,19 @@
 |---------|------|---------|------|
 | `业务分类` | VARCHAR | 交易数据汇总 | 分组维度（交易所业务/银行间业务等） |
 | `委托方向` | VARCHAR | 交易数据汇总 | 分组维度（取值见 `rules.md` 委托方向口径） |
-| `指令状态` | VARCHAR | 交易数据汇总 | 过滤条件（排除"撤销"） |
-| `指令金额` | NUMBER | 交易数据汇总 | 金额列（SUM） |
-| `成交金额` | NUMBER | 交易数据汇总 | 金额列（SUM） |
+| `指令状态` | VARCHAR | 交易数据汇总 | 过滤条件（已撤销且未成交不计；部分/全部成交仍统计） |
+| `成交状态` | VARCHAR | 交易数据汇总 | 过滤条件（已撤销时区分未成交/部分成交/全部成交；缺失视为未成交） |
+| `指令金额` | NUMBER | 交易数据汇总 | 金额列（总指令金额参考口径，SUM） |
+| `成交金额` | NUMBER | 交易数据汇总 | 金额列（分类金额/总成交金额主口径，SUM） |
 | `指令下达时间` | NUMBER | 交易笔数 | 按小时分组（HHMMSS → 小时） |
-| `指令价格 (回购为利率)` | NUMBER | 交易金额 | 利率值（AVG/MAX/MIN） |
-| `回购天数` | NUMBER | 交易金额 | 品种分类（1=R001, 7=R007, 14=R014） |
 
 ### 聚合逻辑
 
 | 日报栏目 | 聚合方式 | 代码函数 |
 |---------|---------|---------|
-| 交易数据汇总 | GROUP BY (业务分类 + 委托方向), SUM(指令金额), COUNT(*) | `aggregate_trade_overview()` |
-| 交易笔数 | GROUP BY HOUR(指令下达时间), COUNT(*) | `aggregate_trade_count_by_hour()` |
-| 交易金额 | GROUP BY 回购天数，AVG/MAX/MIN(指令价格) | `aggregate_trade_prices()` |
+| 交易数据汇总 | 四类(现券/资金/权益/一级) × 买/卖，SUM(成交金额) + COUNT(有效指令)；另 SUM(指令金额) 作总指令金额参考 | `aggregate_trade_overview()` |
+| 交易笔数 | GROUP BY HOUR(指令下达时间), COUNT(有效指令) | `aggregate_trade_count_by_hour()` |
+| 交易金额(按方向) | 当日方向 × SUM(成交金额)；回购仅统计银行间 | `aggregate_trade_amount_by_direction()` |
 
 ### 数据缺口
 
@@ -154,13 +153,13 @@
 SQL `日评/早评/午评` 召回 → CONTENT 原文去重 → 标题分主题 → 选代表篇 → 原文输出（去 URL/空行清洗）。脚本产出的 `market_commentary` 为原文 dump，不做精炼。
 
 **精炼层**（Claude 执行）：
-脚本输出 HTML 后，Claude 读取资金/现券栏的原文 dump，按 `prompts/` 模板精炼为 3-5 句判断性总结；权益栏由 Claude 通过 WebSearch 获取 A 股行情后按 `prompts/stock-commentary.md` 生成总结。精炼结果直接编辑 HTML 替换。一级无独立日评，固定降级「暂无相关数据」。
+脚本输出 HTML 后，Claude 读取资金/现券/一级栏的原文 dump，按 `prompts/` 模板精炼为 3-5 句判断性总结；权益栏由 Claude 通过 WebSearch 获取 A 股行情后按 `prompts/stock-commentary.md` 生成总结。精炼结果直接编辑 HTML 替换。一级无独立日评，但从资金日评的【一级简评】小节提取原文 dump 供精炼。
 
 | 栏目 | Prompt 文件 | 输入来源 |
 |------|-----------|---------|
 | 资金市场分析 | `prompts/funding-commentary.md` | QT 资金日评原文 dump |
 | 现券市场分析 | `prompts/bond-commentary.md` | QT 现券日评原文 dump |
-| 一级市场分析 | —（脚本自动，无 prompt） | 0013 发行数据 → 发行卡+明细表（见 `data-sources.md`） |
+| 一级市场分析 | `prompts/primary-commentary.md` | 资金日评【一级简评】小节原文 dump + 0013 发行数据 |
 | 权益市场分析 | `prompts/stock-commentary.md` | WebSearch A 股收盘数据 |
 
 原 `categorize_messages` 全表关键词匹配（误把报价当短评）已移除。
@@ -178,7 +177,7 @@ SQL `日评/早评/午评` 召回 → CONTENT 原文去重 → 标题分主题 �
 | 市场预测汇总 · OMO | `cat_sql_trade_0013` | 资金事件日历内 OMO 净投放、投放/到期明细、政府债缴款 | API 不可用时不生成该扰动指标 |
 | 市场预测汇总 · 收益率曲线 | 中国货币网「债券收盘收益率曲线」 | `https://www.chinamoney.com.cn/chinese/bkcurvclosedy/`；国债、政策性金融债等曲线，每个工作日公布 | 抓取失败时现券预测仅使用 QT 现券情绪和资金面评分，并标注低置信度 |
 | 市场预测汇总 · 回购利率 | `cat_sql_trade_0012`（主）/ 中国货币网货币市场行情 `prr-md.json`（降级） | 主源抓 R001/007/014、DR001/007/014；主源失败切货币网静态 JSON（`collect_chinamoney_repo_rates`） | 两者均失败时预测表利率指标行降级 |
-| 市场预测汇总 · 权益指数 | 新浪财经（主源）+ 腾讯财经（备源） | `https://hq.sinajs.cn/list=sh000001,sz399001,sz399006,sh000688`；双源自动切换，4 指数（上证/深证/创业板/科创50） | 双源均失败时权益预测行显示 `暂无相关数据` |
+| 市场预测汇总 · 权益指数 | 新浪财经（主源）+ 腾讯财经（备源） | `https://hq.sinajs.cn/list=sh000001,sz399001,sz399006,sh000688`；双源自动切换采集 4 指数，预测表仅展示 2 指数（上证/创业板），深证成指/科创50 另供「权益市场分析」栏目 | 双源均失败时权益预测行显示 `暂无相关数据` |
 | 市场预测汇总 · 一级 CD | 待确定 | 需确定 1Y 大行 CD 发行利率和二级利差可用来源；当前仅从一级发行短评中尝试抽取 | 无短评或无可解析数值时显示 `暂无相关数据` |
 | 一级市场分析 | 资金事件日历 cat_sql_trade_0013 发行与到期·发行方向 | `aggregate_primary_market()` > `primary_market` | "暂无相关数据"（当日无发行时） |
 

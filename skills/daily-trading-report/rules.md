@@ -17,6 +17,7 @@
 | `prompts/funding-commentary.md` | 资金市场分析精炼 prompt |
 | `prompts/bond-commentary.md` | 现券市场分析精炼 prompt |
 | `prompts/stock-commentary.md` | 权益市场分析生成 prompt |
+| `prompts/primary-commentary.md` | 一级市场分析精炼 prompt |
 
 ## 数据计算原则
 
@@ -69,6 +70,7 @@
 | MSG_TIME 显示异常 | 9 位整数 HHMMSSfff | `f"{val:09d}"` 补齐取前 6 位 |
 | STAT_DT 日期偏移 | UTC 时间 | UTC 日期 + 1 = 北京日期 |
 | Windows GBK 编码 | emoji 输出到 cmd | `PYTHONIOENCODING=utf-8` |
+| 历史日报数据为空 | 测试环境 O32/API 不支持历史查询，返回 0 条 | 必须 `--use-cache` 使用 `cache/` 中已有缓存 |
 
 ## 关键决策
 
@@ -105,7 +107,7 @@
 | 现券市场分析 | QT 现券日评 或 WebSearch | QT 有现券日评→精炼；QT 无→WebSearch"YYYY年M月D日 债券市场 利率债 收盘"获取国债期货/收益率/资金面/机构观点 |
 | 权益市场分析 | WebSearch | WebSearch"YYYY年M月D日 A股市场收盘总结"获取指数涨跌/成交额/板块轮动/驱动因素 |
 | 资金市场分析 | QT 资金日评（脚本已填原文） | 按 `prompts/funding-commentary.md` 精炼为 3-5 句判断性总结 |
-| 一级市场分析 | 脚本已自动填充发行数据 | 若资金日评「一级简评」有内容则补充 |
+| 一级市场分析 | QT【一级简评】+ 脚本发行数据 | 若资金日评含【一级简评】→ 按 `prompts/primary-commentary.md` 精炼为 3-5 句判断性总结；脚本自动（卡片+明细表）→ 过 |
 
 - 注入方式：直接 `Edit` HTML 替换占位文本
 - 不得以"暂无有效消息"作为最终交付物
