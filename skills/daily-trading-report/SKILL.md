@@ -18,6 +18,7 @@ cd "D:\代码\git_public\my-skills\skills\daily-trading-report\scripts"
 uv run python generate_report.py --date {YYYYMMDD}
 ```
 
+- 学习模式（培训/口径讲解）：`uv run python generate_report.py --date {YYYYMMDD} --learning`
 - 完整流程（日期确认、可选参数 `--no-charts` / `--output`、首次 `uv sync`、Oracle Instant Client 环境依赖、结果检查、错误排查）：见 `runbook.md`。
 - API / Oracle 配置：见 `config.json`（脱敏模板 `config.example.json`）。
 - 接口文档：`reference/API接口接入手册.md`。

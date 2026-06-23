@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>创金合信基金交易部 · 交易日报 · {{ template_date | default(display_date) }}（{{ weekday }}）</title>
+<title>创金合信基金交易部 · 交易日报{% if learning_mode %}（学习模式）{% endif %} · {{ template_date | default(display_date) }}（{{ weekday }}）</title>
 <style>
   /* ── 全局 ── */
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -78,6 +78,23 @@
     margin-top: 6px;
     letter-spacing: 4px;
     text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .mode-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid rgba(255,255,255,0.55);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.14);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0;
+    white-space: nowrap;
   }
   .header-right {
     text-align: right;
@@ -85,11 +102,13 @@
     opacity: 0.95;
     position: relative;
     z-index: 1;
+    min-width: 190px;
   }
   .header-right .date {
     font-size: 20px;
     font-weight: 700;
     margin-bottom: 4px;
+    white-space: nowrap;
   }
 
   /* ── 板块通用 ── */
@@ -387,16 +406,16 @@
   <!-- ══════════════ 头部 ═══════════════ -->
   <div class="header">
     <div class="header-left">
-      <div style="display: flex; align-items: center; gap: 12px;">
-        <div style="width: 40px; height: 40px; background: rgba(255,255,255,0.2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700;">CJ</div>
-        <div>
-          <h1>创金合信基金交易部</h1>
-          <h2>交易日报</h2>
-        </div>
+      <div>
+        <h1>创金合信基金交易部</h1>
+        <h2>交易日报{% if learning_mode %}<span class="mode-badge">学习模式</span>{% endif %}</h2>
       </div>
     </div>
     <div class="header-right">
       <div class="date">{{ template_date | default(display_date) }}（{{ weekday }}）</div>
+      {% if learning_mode %}
+      <button class="learning-flow-trigger learning-trigger" type="button" data-panel="__workflow" aria-label="查看生成流程">生成流程</button>
+      {% endif %}
     </div>
   </div>
 
@@ -406,7 +425,7 @@
 
   <!-- ═══════════════ 01 交易数据汇总 ═══════════════ -->
   <div class="section">
-    <div class="section-title"><span class="icon">01</span> 交易数据汇总</div>
+    <div class="section-title{% if learning_mode %} learning-trigger{% endif %}"{% if learning_mode %} data-panel="01" tabindex="0" role="button" aria-label="点击查看数据来源"{% endif %}><span class="icon">01</span> 交易数据汇总{% if learning_mode %}<span class="learning-icon" aria-hidden="true">ⓘ</span>{% endif %}</div>
     <div class="template-subtitle">交易数据汇总</div>
 
     {% if trade_overview.分类明细 %}
@@ -546,7 +565,7 @@
 
   <!-- ══════════════ 02 交收数据汇总 ═══════════════ -->
   <div class="section">
-    <div class="section-title"><span class="icon">02</span> 交收数据汇总</div>
+    <div class="section-title{% if learning_mode %} learning-trigger{% endif %}"{% if learning_mode %} data-panel="02" tabindex="0" role="button" aria-label="点击查看数据来源"{% endif %}><span class="icon">02</span> 交收数据汇总{% if learning_mode %}<span class="learning-icon" aria-hidden="true">ⓘ</span>{% endif %}</div>
 
     {% if emergency_repo.has_data %}
     <p>今日应急金额为{{ "%.0f"|format(emergency_repo.总金额万元) }}万元。</p>
@@ -581,8 +600,9 @@
 
   <!-- ═══════════════ 03 市场预测汇总 ═══════════════ -->
   <div class="section">
-    <div class="section-title"><span class="icon">03</span> 市场预测汇总</div>
+    <div class="section-title{% if learning_mode %} learning-trigger{% endif %}"{% if learning_mode %} data-panel="03" tabindex="0" role="button" aria-label="点击查看数据来源"{% endif %}><span class="icon">03</span> 市场预测汇总{% if learning_mode %}<span class="learning-icon" aria-hidden="true">ⓘ</span>{% endif %}</div>
 
+    <div class="template-subtitle">预测结论</div>
     {% if market_forecast.rows %}
     <table>
       <thead>
@@ -618,7 +638,8 @@
 
   <!-- ═══════════════ 04 资金市场分析 ═══════════════ -->
   <div class="section">
-    <div class="section-title"><span class="icon">04</span> 资金市场分析</div>
+    <div class="section-title{% if learning_mode %} learning-trigger{% endif %}"{% if learning_mode %} data-panel="04" tabindex="0" role="button" aria-label="点击查看数据来源"{% endif %}><span class="icon">04</span> 资金市场分析{% if learning_mode %}<span class="learning-icon" aria-hidden="true">ⓘ</span>{% endif %}</div>
+    <p class="muted-note">填写人：自动</p>
 
     {% if funding_market_status.overall %}
     <div class="inline-heading">▶整体状态</div>
@@ -703,14 +724,14 @@
 
   <!-- ═══════════════ 现券市场分析 ═══════════════ -->
   <div class="section">
-    <div class="section-title">现券市场分析</div>
+    <div class="section-title{% if learning_mode %} learning-trigger{% endif %}"{% if learning_mode %} data-panel="现券" tabindex="0" role="button" aria-label="点击查看数据来源"{% endif %}>现券市场分析{% if learning_mode %}<span class="learning-icon" aria-hidden="true">ⓘ</span>{% endif %}</div>
 
     <div class="analysis-box">{{ market_commentary.bond }}</div>
   </div>
 
   <!-- ═══════════════ 权益市场分析 ═══════════════ -->
   <div class="section">
-    <div class="section-title">权益市场分析</div>
+    <div class="section-title{% if learning_mode %} learning-trigger{% endif %}"{% if learning_mode %} data-panel="权益" tabindex="0" role="button" aria-label="点击查看数据来源"{% endif %}>权益市场分析{% if learning_mode %}<span class="learning-icon" aria-hidden="true">ⓘ</span>{% endif %}</div>
     {% if equity_indices.available %}
     <table>
       <thead><tr><th>指数</th><th>最新价</th><th>涨跌幅</th></tr></thead>
@@ -738,7 +759,7 @@
 
   <!-- ══════════════ 一级市场分析 ═══════════════ -->
   <div class="section">
-    <div class="section-title">一级市场分析</div>
+    <div class="section-title{% if learning_mode %} learning-trigger{% endif %}"{% if learning_mode %} data-panel="一级" tabindex="0" role="button" aria-label="点击查看数据来源"{% endif %}>一级市场分析{% if learning_mode %}<span class="learning-icon" aria-hidden="true">ⓘ</span>{% endif %}</div>
 
     {% if primary_market.available %}
     <div class="inline-heading">发行情况{% if primary_market.data_date %}（{{ primary_market.data_date }}）{% endif %}</div>
@@ -803,15 +824,18 @@
 
   <!-- ═══════════════ 风险提示 ═══════════════ -->
   <div class="section">
-    <div class="section-title">风险提示</div>
+    <div class="section-title{% if learning_mode %} learning-trigger{% endif %}"{% if learning_mode %} data-panel="风险" tabindex="0" role="button" aria-label="点击查看数据来源"{% endif %}>风险提示{% if learning_mode %}<span class="learning-icon" aria-hidden="true">ⓘ</span>{% endif %}</div>
 
     <ol class="risk-list">
-      <li><span class="risk-index">1、</span><span>本材料仅供内部参考使用，未经允许不得外发。</span></li>
-      <li><span class="risk-index">2、</span><span>材料中的市场分析和趋势预测等相关信息不构成收益承诺，仅供参考，具体以市场实际行情为准。</span></li>
-      <li><span class="risk-index">3、</span><span>我们力求但不保证材料中信息的准确性和完整性，也不保证材料中观点或陈述不会发生任何变更。</span></li>
+      {% for tip in risk_tips %}
+      <li><span class="risk-index">{{ loop.index }}.</span><span>{{ tip }}</span></li>
+      {% endfor %}
     </ol>
   </div>
 
 </div>
+{% if learning_mode %}
+{% include "_learning_panel.html" %}
+{% endif %}
 </body>
 </html>

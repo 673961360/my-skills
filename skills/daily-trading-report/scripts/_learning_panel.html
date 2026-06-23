@@ -1,0 +1,649 @@
+<!-- 数据来源面板（学习模式） -->
+<div id="learning-panel" class="learning-panel" aria-hidden="true">
+  <div class="learning-panel-header">
+    <div>
+      <div class="learning-panel-kicker">学习模式</div>
+      <div class="learning-panel-title">学习讲解</div>
+    </div>
+    <button class="learning-panel-close" type="button" aria-label="关闭面板">×</button>
+  </div>
+  <div class="learning-panel-body" id="learning-panel-body"></div>
+</div>
+<div id="learning-reference-panel" class="learning-reference-panel" aria-hidden="true">
+  <div class="learning-reference-header">
+    <div>
+      <div class="learning-panel-kicker">引用文件</div>
+      <div class="learning-reference-title" id="learning-reference-title">未选择文件</div>
+    </div>
+    <button class="learning-reference-close" type="button" aria-label="关闭引用文件">×</button>
+  </div>
+  <div class="learning-reference-path" id="learning-reference-path"></div>
+  <pre class="learning-reference-code-wrap"><code id="learning-reference-code"></code></pre>
+</div>
+<template id="learning-reference-index">
+  {% for path, ref in learning_references.items() %}
+  <button type="button" data-reference="{{ path }}">{{ ref.title }}</button>
+  {% endfor %}
+</template>
+<div id="learning-overlay" class="learning-overlay" aria-hidden="true"></div>
+
+<style>
+  .learning-trigger {
+    cursor: pointer;
+    transition: background 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+  .learning-trigger:hover,
+  .learning-trigger:focus-visible {
+    background: #1f6fae;
+    box-shadow: 0 0 0 3px rgba(47, 129, 199, 0.22);
+    outline: none;
+  }
+  .learning-trigger.active {
+    background: #155f99;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.28);
+  }
+  .learning-icon {
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+    margin-left: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 50%;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1;
+    opacity: 0.92;
+  }
+  .learning-flow-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 8px;
+    padding: 5px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .learning-flow-trigger:hover,
+  .learning-flow-trigger:focus-visible {
+    background: rgba(255, 255, 255, 0.24);
+    outline: none;
+  }
+  .learning-panel {
+    position: fixed;
+    top: 0;
+    right: -540px;
+    z-index: 50;
+    width: 520px;
+    max-width: calc(100vw - 56px);
+    height: 100vh;
+    background: #f0f5ff;
+    border-left: 3px solid #2563eb;
+    box-shadow: -12px 0 32px rgba(15, 23, 42, 0.22);
+    transition: right 250ms ease;
+    display: flex;
+    flex-direction: column;
+    font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  }
+  .learning-panel.open {
+    right: 0;
+  }
+  .learning-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 18px 14px;
+    background: #0f5d9b;
+    color: #fff;
+  }
+  .learning-panel-kicker {
+    font-size: 11px;
+    opacity: 0.78;
+    letter-spacing: 1px;
+  }
+  .learning-panel-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+  .learning-panel-close {
+    width: 30px;
+    height: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .learning-panel-close:hover,
+  .learning-panel-close:focus-visible {
+    background: rgba(255, 255, 255, 0.22);
+    outline: none;
+  }
+  .learning-panel-body {
+    padding: 18px 20px 24px;
+    overflow-y: auto;
+    color: #243247;
+    font-size: 13.5px;
+    line-height: 1.72;
+  }
+  .learning-source-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #123f6d;
+    margin-bottom: 12px;
+  }
+  .learning-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 12px;
+  }
+  .learning-tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 2px 8px;
+    border-radius: 11px;
+    background: #dbeafe;
+    color: #164f8f;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .learning-summary {
+    padding: 12px;
+    margin-bottom: 14px;
+    background: #fff;
+    border: 1px solid #d8e5f7;
+    border-radius: 6px;
+    color: #1f2f46;
+    font-weight: 600;
+  }
+  .learning-block {
+    margin: 12px 0;
+    padding: 10px 11px;
+    background: #fff;
+    border: 1px solid #d8e5f7;
+    border-radius: 6px;
+  }
+  .learning-block h4 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 6px;
+    color: #155f99;
+    font-size: 13px;
+  }
+  .learning-block p {
+    margin: 0;
+  }
+  .learning-block ul {
+    margin: 0;
+    padding-left: 18px;
+  }
+  .learning-block li {
+    margin: 3px 0;
+  }
+  .learning-flow {
+    display: grid;
+    gap: 8px;
+    margin: 12px 0;
+  }
+  .learning-flow-step {
+    display: grid;
+    grid-template-columns: 24px 1fr;
+    gap: 8px;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid #d8e5f7;
+    border-radius: 6px;
+  }
+  .learning-flow-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #155f99;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .learning-flow-title {
+    display: block;
+    color: #123f6d;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .learning-trust {
+    padding: 11px;
+    margin: 12px 0;
+    border-radius: 6px;
+    background: #f8fbff;
+    border: 1px solid #c8dcf5;
+  }
+  .learning-trust-level {
+    color: #0f5d9b;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .learning-source-map {
+    display: grid;
+    gap: 7px;
+  }
+  .learning-source-row {
+    padding: 8px 9px;
+    background: #fff;
+    border: 1px solid #d8e5f7;
+    border-radius: 4px;
+  }
+  .learning-source-key {
+    display: block;
+    color: #123f6d;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .learning-empty {
+    padding: 14px;
+    background: #fff;
+    border: 1px dashed #b8c7dc;
+    border-radius: 6px;
+    color: #607086;
+  }
+  .learning-reference-links {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+  .learning-reference-link {
+    width: 100%;
+    padding: 8px 9px;
+    border: 1px solid #bed4f0;
+    border-radius: 4px;
+    background: #f8fbff;
+    color: #123f6d;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+  }
+  .learning-reference-link:hover,
+  .learning-reference-link:focus-visible {
+    background: #dbeafe;
+    outline: none;
+  }
+  .learning-reference-panel {
+    position: fixed;
+    top: 18px;
+    left: 16px;
+    z-index: 49;
+    width: min(390px, calc((100vw - 760px) / 2));
+    min-width: 260px;
+    max-height: calc(100vh - 36px);
+    display: none;
+    flex-direction: column;
+    background: #f8fbff;
+    border: 1px solid #b7d2ef;
+    border-left: 3px solid #0f5d9b;
+    border-radius: 6px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.2);
+    overflow: hidden;
+    font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  }
+  .learning-reference-panel.open {
+    display: flex;
+  }
+  .learning-reference-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 13px 14px 11px;
+    background: #0f5d9b;
+    color: #fff;
+  }
+  .learning-reference-title {
+    margin-top: 2px;
+    font-size: 15px;
+    font-weight: 700;
+    word-break: break-all;
+  }
+  .learning-reference-close {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .learning-reference-close:hover,
+  .learning-reference-close:focus-visible {
+    background: rgba(255, 255, 255, 0.22);
+    outline: none;
+  }
+  .learning-reference-path {
+    padding: 8px 12px;
+    border-bottom: 1px solid #d7e6f5;
+    background: #eef6ff;
+    color: #31506f;
+    font-size: 11px;
+    font-family: Consolas, "Courier New", monospace;
+    word-break: break-all;
+  }
+  .learning-reference-code-wrap {
+    margin: 0;
+    padding: 12px;
+    overflow: auto;
+    color: #172033;
+    background: #fff;
+    font-size: 11px;
+    line-height: 1.55;
+    font-family: Consolas, "Courier New", monospace;
+    white-space: pre;
+  }
+  .learning-overlay {
+    display: none;
+  }
+  @media (max-width: 768px) {
+    .learning-panel {
+      top: auto;
+      right: 0;
+      bottom: -82vh;
+      width: 100%;
+      height: 80vh;
+      border-left: none;
+      border-top: 3px solid #2563eb;
+      border-radius: 12px 12px 0 0;
+      transition: bottom 250ms ease;
+    }
+    .learning-reference-panel {
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      top: auto;
+      width: auto;
+      min-width: 0;
+      max-height: 46vh;
+      z-index: 55;
+    }
+    .learning-panel.open {
+      bottom: 0;
+    }
+    .learning-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 45;
+      background: rgba(15, 23, 42, 0.32);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 200ms ease;
+      display: block;
+    }
+    .learning-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+  @media print {
+    .learning-panel,
+    .learning-reference-panel,
+    .learning-overlay,
+    .learning-icon,
+    .learning-flow-trigger {
+      display: none !important;
+    }
+  }
+</style>
+
+<script>
+(function() {
+  const LEARNING_ANNOTATIONS = {{ learning_annotations_json }};
+  const LEARNING_REFERENCES = {{ learning_references_json }};
+  const panel = document.getElementById("learning-panel");
+  const panelBody = document.getElementById("learning-panel-body");
+  const closeBtn = panel.querySelector(".learning-panel-close");
+  const overlay = document.getElementById("learning-overlay");
+  const referencePanel = document.getElementById("learning-reference-panel");
+  const referenceTitle = document.getElementById("learning-reference-title");
+  const referencePath = document.getElementById("learning-reference-path");
+  const referenceCode = document.getElementById("learning-reference-code");
+  const referenceCloseBtn = referencePanel.querySelector(".learning-reference-close");
+  let activeSection = null;
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function renderValue(value) {
+    if (Array.isArray(value)) {
+      return "<ul>" + value.map(item => {
+        if (item && typeof item === "object") {
+          return "<li>" + escapeHtml(item["阶段"] || item["标题"] || "") + "：" + escapeHtml(item["说明"] || item["内容"] || "") + "</li>";
+        }
+        return "<li>" + escapeHtml(item) + "</li>";
+      }).join("") + "</ul>";
+    }
+    if (value && typeof value === "object") {
+      return '<div class="learning-source-map">' + Object.entries(value).map(([key, text]) => (
+        '<div class="learning-source-row"><span class="learning-source-key">' +
+        escapeHtml(key) +
+        "</span>" +
+        escapeHtml(text) +
+        "</div>"
+      )).join("") + "</div>";
+    }
+    return "<p>" + escapeHtml(value || "暂无说明") + "</p>";
+  }
+
+  function renderBlock(icon, title, value) {
+    if (!value || (Array.isArray(value) && value.length === 0)) {
+      return "";
+    }
+    return '<section class="learning-block"><h4><span>' +
+      icon +
+      "</span>" +
+      escapeHtml(title) +
+      "</h4>" +
+      renderValue(value) +
+      "</section>";
+  }
+
+  function renderTags(tags) {
+    if (!Array.isArray(tags) || tags.length === 0) {
+      return "";
+    }
+    return '<div class="learning-tags">' + tags.map(tag => '<span class="learning-tag">' + escapeHtml(tag) + '</span>').join("") + "</div>";
+  }
+
+  function renderFlow(steps) {
+    if (!Array.isArray(steps) || steps.length === 0) {
+      return "";
+    }
+    return '<div class="learning-flow">' + steps.map((step, index) => (
+      '<div class="learning-flow-step"><span class="learning-flow-index">' +
+      (index + 1) +
+      '</span><div><span class="learning-flow-title">' +
+      escapeHtml(step["阶段"] || step["标题"] || "") +
+      "</span>" +
+      escapeHtml(step["说明"] || step["内容"] || "") +
+      "</div></div>"
+    )).join("") + "</div>";
+  }
+
+  function renderSections(sections) {
+    if (!Array.isArray(sections) || sections.length === 0) {
+      return "";
+    }
+    return sections.map(section => renderBlock("▸", section["标题"] || "", section["内容"])).join("");
+  }
+
+  function renderTrust(trust) {
+    if (!trust) {
+      return "";
+    }
+    if (typeof trust === "string") {
+      return renderBlock("✅", "可信度", trust);
+    }
+    return '<section class="learning-trust"><div class="learning-trust-level">' +
+      escapeHtml(trust["等级"] || "可信度说明") +
+      "</div>" +
+      renderValue(trust["原因"] || trust["说明"] || "") +
+      "</section>";
+  }
+
+  function normalizeReferences(refs) {
+    if (!refs) {
+      return [];
+    }
+    if (typeof refs === "string") {
+      return [refs];
+    }
+    if (Array.isArray(refs)) {
+      return refs.map(ref => {
+        if (typeof ref === "string") {
+          return ref;
+        }
+        return ref && (ref.path || ref["路径"]);
+      }).filter(Boolean);
+    }
+    return [];
+  }
+
+  function renderReferences(refs) {
+    const paths = normalizeReferences(refs).filter(path => LEARNING_REFERENCES[path]);
+    if (!paths.length) {
+      return "";
+    }
+    return '<section class="learning-block"><h4><span>📄</span>引用文件</h4><div class="learning-reference-links">' +
+      paths.map(path => (
+        '<button class="learning-reference-link" type="button" data-reference="' +
+        escapeHtml(path) +
+        '">' +
+        escapeHtml(path) +
+        "</button>"
+      )).join("") +
+      "</div></section>";
+  }
+
+  function openReference(path) {
+    const ref = LEARNING_REFERENCES[path];
+    if (!ref) {
+      return;
+    }
+    referenceTitle.textContent = ref.title || path;
+    referencePath.textContent = ref.path || path;
+    referenceCode.textContent = ref.content || "";
+    referenceCode.className = "language-" + (ref.language || "text");
+    referencePanel.classList.add("open");
+    referencePanel.setAttribute("aria-hidden", "false");
+  }
+
+  function closeReference() {
+    referencePanel.classList.remove("open");
+    referencePanel.setAttribute("aria-hidden", "true");
+  }
+
+  function renderPanelContent(key) {
+    const data = LEARNING_ANNOTATIONS[key];
+    if (!data) {
+      panelBody.innerHTML = '<div class="learning-empty">该板块暂无数据来源说明。</div>';
+      return;
+    }
+    const lead = data["主旨"] || data["定位"] || data["概要"] || "暂无概要";
+    panelBody.innerHTML =
+      '<div class="learning-source-title">' + escapeHtml(data["标题"] || key) + "</div>" +
+      renderTags(data["标签"]) +
+      '<div class="learning-summary">' + escapeHtml(lead) + "</div>" +
+      renderReferences(data["引用文件"]) +
+      renderFlow(data["流程"]) +
+      renderSections(data["sections"]) +
+      renderBlock("🔗", "数据怎么取", data["来源"]) +
+      renderBlock("⚙️", "脚本怎么加工", data["加工"]) +
+      renderTrust(data["可信度"]) +
+      renderBlock("🛡", "合规处理", data["合规"]) +
+      renderBlock("✍", "提示词替代哪一步", data["提示词"]) +
+      renderBlock("👤", "人工复核点", data["人工复核"]) +
+      renderBlock("🧩", "如何沉淀成 Skill", data["Skill沉淀"]) +
+      renderBlock("⚠️", "讲解时提醒", data["注意"]);
+  }
+
+  function setActiveTrigger(key) {
+    document.querySelectorAll(".learning-trigger.active").forEach(el => el.classList.remove("active"));
+    const trigger = Array.from(document.querySelectorAll(".learning-trigger")).find(el => el.dataset.panel === key);
+    if (trigger) {
+      trigger.classList.add("active");
+    }
+  }
+
+  function openPanel(key) {
+    renderPanelContent(key);
+    panel.classList.add("open");
+    overlay.classList.add("visible");
+    panel.setAttribute("aria-hidden", "false");
+    activeSection = key;
+    setActiveTrigger(key);
+  }
+
+  function closePanel() {
+    panel.classList.remove("open");
+    overlay.classList.remove("visible");
+    panel.setAttribute("aria-hidden", "true");
+    document.querySelectorAll(".learning-trigger.active").forEach(el => el.classList.remove("active"));
+    activeSection = null;
+  }
+
+  document.querySelectorAll(".learning-trigger").forEach(trigger => {
+    trigger.addEventListener("click", function() {
+      const key = this.dataset.panel;
+      if (activeSection === key) {
+        closePanel();
+      } else {
+        openPanel(key);
+      }
+    });
+    trigger.addEventListener("keydown", function(event) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        this.click();
+      }
+    });
+  });
+
+  panelBody.addEventListener("click", event => {
+    const button = event.target.closest(".learning-reference-link");
+    if (button) {
+      openReference(button.dataset.reference);
+    }
+  });
+
+  referenceCloseBtn.addEventListener("click", closeReference);
+  closeBtn.addEventListener("click", closePanel);
+  overlay.addEventListener("click", closePanel);
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && activeSection) {
+      closePanel();
+      closeReference();
+    }
+  });
+})();
+</script>

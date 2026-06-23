@@ -12,6 +12,7 @@ uv run python generate_report.py --date {YYYYMMDD}
 可选参数：
 - `--no-charts`：跳过图表生成（加速调试，QT 采集仍需 20-30 秒）
 - `--output custom.html`：指定输出路径（默认 `reports/YYYY-MM-DD-daily.html`）
+- `--learning`：生成学习模式日报，输出 `reports/YYYY-MM-DD-daily-learning.html`，每个主板块标题可点击查看数据来源、加工方式、可信度和注意事项
 
 首次运行或依赖变更时：
 ```bash
@@ -63,6 +64,7 @@ uv run python scripts/generate_report.py --date {YYYYMMDD} --use-cache
 
 1. **确认日期**：默认当日，用户可指定。向用户确认日期和星期
 2. **运行脚本**：`uv run python generate_report.py --date YYYYMMDD`
+   - 若用于培训或口径讲解：`uv run python generate_report.py --date YYYYMMDD --learning`
 3. **Claude 注入短评（必须执行，不可跳过）**：
    脚本输出的 HTML 中现券/权益栏为占位文本。Claude 必须通过 WebSearch 获取当日市场信息并注入：
    - **现券市场分析**：QT 现券日评原文 dump 由脚本填入（**中间态**），按 `prompts/bond-commentary.md` 精炼为 3-5 句，剔除 OMO/资金面/一级（他栏已有）；QT 无现券日评才 WebSearch "YYYY年M月D日 债券 利率债 收盘"
@@ -79,7 +81,7 @@ uv run python scripts/generate_report.py --date {YYYYMMDD} --use-cache
    - 成功 → 读取 HTML，向用户展示摘要
    - 失败 → 根据错误信息排查（见下方错误表）
 5. **用户审核**：最多 3 轮调整
-6. **交付**：告知文件路径，询问是否创建飞书文档
+6. **交付**：告知文件路径，询问是否通过企微群机器人发送日报（使用 `send-wecom-group-message` skill）
 
 ## 错误排查
 

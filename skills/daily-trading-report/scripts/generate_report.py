@@ -5,9 +5,11 @@
     python generate_report.py                    # 生成当日日报
     python generate_report.py --date 20260621    # 指定日期
     python generate_report.py --date 20260621 --output custom.html  # 指定输出路径
+    python generate_report.py --learning           # 生成学习模式日报
 
 输出：
     reports/YYYY-MM-DD-daily.html
+    reports/YYYY-MM-DD-daily-learning.html
 """
 
 import argparse
@@ -31,23 +33,129 @@ from api_client import get_config, clear_api_cache
 from data_collector import collect_all, _parse_date, _fmt_display_date, build_equity_market_analysis
 from chart_builder import build_all_charts
 
-
-def _load_template() -> str:
-    """加载 Jinja2 HTML 模板。"""
-    template_path = PROJECT_DIR / "report_template.html"
-    with open(template_path, "r", encoding="utf-8") as f:
-        return f.read()
+LEARNING_REFERENCE_EXTENSIONS = {".py", ".md", ".json"}
+LEARNING_REFERENCE_MAX_CHARS = 24000
 
 
-def render_report(data: dict, charts: dict) -> str:
+def load_learning_annotations() -> dict:
+    """Load learning-mode data source annotations."""
+    annotations_path = PROJECT_DIR.parent / "data" / "learning-annotations.json"
+    with open(annotations_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _json_for_inline_script(value: dict) -> str:
+    """Serialize JSON safely for embedding inside a script tag."""
+    return json.dumps(value, ensure_ascii=False).replace("</", "<\\/")
+
+
+def _reference_values(value) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        refs: list[str] = []
+        for item in value:
+            refs.extend(_reference_values(item))
+        return refs
+    if isinstance(value, dict):
+        path = value.get("path") or value.get("路径")
+        return [str(path)] if path else []
+    return []
+
+
+def _collect_reference_paths(value) -> list[str]:
+    if isinstance(value, dict):
+        refs: list[str] = []
+        for key, item in value.items():
+            if key == "引用文件":
+                refs.extend(_reference_values(item))
+            else:
+                refs.extend(_collect_reference_paths(item))
+        return refs
+    if isinstance(value, list):
+        refs: list[str] = []
+        for item in value:
+            refs.extend(_collect_reference_paths(item))
+        return refs
+    return []
+
+
+def _resolve_learning_reference(raw_path: str) -> tuple[str, Path] | None:
+    normalized = raw_path.replace("\\", "/").strip().lstrip("/")
+    if not normalized:
+        return None
+
+    root = PROJECT_DIR.parent.resolve()
+    candidate = (root / normalized).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None
+
+    if candidate.suffix.lower() not in LEARNING_REFERENCE_EXTENSIONS:
+        return None
+    if not candidate.is_file():
+        return None
+
+    relative = candidate.relative_to(root).as_posix()
+    return relative, candidate
+
+
+def _language_for_reference(path: str) -> str:
+    suffix = Path(path).suffix.lower()
+    return {
+        ".py": "python",
+        ".md": "markdown",
+        ".json": "json",
+    }.get(suffix, "text")
+
+
+def load_learning_references(annotations: dict) -> dict:
+    """Load safe project text files referenced by learning-mode annotations."""
+    references: dict[str, dict] = {}
+    for raw_path in _collect_reference_paths(annotations):
+        resolved = _resolve_learning_reference(raw_path)
+        if not resolved:
+            continue
+        relative_path, file_path = resolved
+        if relative_path in references:
+            continue
+
+        content = file_path.read_text(encoding="utf-8", errors="replace")
+        truncated = len(content) > LEARNING_REFERENCE_MAX_CHARS
+        if truncated:
+            content = content[:LEARNING_REFERENCE_MAX_CHARS] + "\n\n...（内容较长，已截断）"
+        references[relative_path] = {
+            "title": file_path.name,
+            "path": relative_path,
+            "language": _language_for_reference(relative_path),
+            "content": content,
+            "truncated": truncated,
+        }
+    return references
+
+
+def render_report(
+    data: dict,
+    charts: dict,
+    learning_mode: bool = False,
+    learning_annotations: dict | None = None,
+) -> str:
     """使用 Jinja2 渲染 HTML 报告。"""
-    from jinja2 import Template
+    from jinja2 import Environment, FileSystemLoader
 
-    template_str = _load_template()
-    template = Template(template_str)
+    env = Environment(loader=FileSystemLoader(str(PROJECT_DIR)), autoescape=False)
+    template = env.get_template("report_template.html")
 
     # 合并数据和图表
-    context = {**data, "charts": charts}
+    context = {**data, "charts": charts, "learning_mode": learning_mode}
+    if learning_mode:
+        annotations = learning_annotations if learning_annotations is not None else load_learning_annotations()
+        references = load_learning_references(annotations)
+        context["learning_annotations"] = annotations
+        context["learning_annotations_json"] = _json_for_inline_script(annotations)
+        context["learning_references"] = references
+        context["learning_references_json"] = _json_for_inline_script(references)
     return template.render(**context)
 
 
@@ -65,6 +173,16 @@ def load_equity_commentary(args: argparse.Namespace) -> str:
         path = Path(args.equity_commentary_file)
         return path.read_text(encoding="utf-8").strip()
     return (args.equity_commentary or "").strip()
+
+
+def resolve_output_path(output_arg: str | None, cfg: dict, display_date: str, learning_mode: bool) -> Path:
+    """Resolve report output path for normal and learning modes."""
+    if output_arg:
+        return Path(output_arg)
+
+    output_dir = PROJECT_DIR.parent / cfg.get("output_dir", "reports")
+    suffix = "daily-learning" if learning_mode else "daily"
+    return output_dir / f"{display_date}-{suffix}.html"
 
 
 def parse_args() -> argparse.Namespace:
@@ -95,6 +213,11 @@ def parse_args() -> argparse.Namespace:
         "--no-charts",
         action="store_true",
         help="跳过图表生成（加速调试）",
+    )
+    parser.add_argument(
+        "--learning",
+        action="store_true",
+        help="输出学习模式日报（含数据来源标注面板）",
     )
     parser.add_argument(
         "--equity-commentary",
@@ -203,15 +326,10 @@ def main():
 
     # Step 4: 渲染并保存
     print(f"\n[4/4] 正在渲染 HTML 报告...")
-    html_content = render_report(data, charts)
+    html_content = render_report(data, charts, learning_mode=args.learning)
 
     # 确定输出路径
-    if args.output:
-        output_path = Path(args.output)
-    else:
-        # 输出到 skill 根目录下的 reports/（scripts 的上级）
-        output_dir = PROJECT_DIR.parent / cfg.get("output_dir", "reports")
-        output_path = output_dir / f"{display_date}-daily.html"
+    output_path = resolve_output_path(args.output, cfg, display_date, args.learning)
 
     save_report(html_content, output_path)
     file_size = output_path.stat().st_size

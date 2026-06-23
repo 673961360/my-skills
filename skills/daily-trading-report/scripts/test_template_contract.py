@@ -395,6 +395,124 @@ class TemplateContractTest(unittest.TestCase):
         }
         self.assertFalse(forbidden_main_titles & set(parser.titles))
 
+    def test_learning_mode_renders_training_panels_only_when_enabled(self):
+        normal_html = render_sample_report()
+
+        self.assertNotIn("learning-panel", normal_html)
+        self.assertNotIn("learning-trigger", normal_html)
+        self.assertNotIn('data-panel="01"', normal_html)
+        self.assertNotIn("learning-flow-trigger", normal_html)
+
+        learning_html = render_report(
+            build_sample_data(),
+            charts={},
+            learning_mode=True,
+            learning_annotations={
+                "__workflow": {
+                    "标题": "整份日报如何生成",
+                    "主旨": "从人工日报 SOP 拆成可复用生成流程。",
+                    "标签": ["SOP", "Python 脚本", "API 网关", "Skill 沉淀"],
+                    "流程": [
+                        {"阶段": "SOP 拆解", "说明": "把人工日报拆成固定栏目和验收口径。"},
+                        {"阶段": "多源汇聚", "说明": "通过 API 网关和厂商资讯拉取数据。"},
+                    ],
+                    "sections": [
+                        {"标题": "为什么能沉淀成 Skill", "内容": ["触发条件固定", "生成命令固定"]},
+                    ],
+                },
+                "01": {
+                    "标题": "01 交易数据汇总",
+                    "定位": "自动复现人工 O32 汇总口径。",
+                    "标签": ["API 网关", "O32", "代码计算", "高可信"],
+                    "sections": [
+                        {"标题": "现在机器怎么取数", "内容": "通过 API 网关调用 O32 指令查询接口。"},
+                        {"标题": "AI 做什么", "内容": ["AI 不计算金额", "AI 只编排流程"]},
+                    ],
+                    "可信度": {
+                        "等级": "高可信",
+                        "原因": ["内部系统原始数据", "代码确定性计算"],
+                    },
+                }
+            },
+        )
+
+        self.assertIn("交易日报（学习模式）", learning_html)
+        self.assertIn('id="learning-panel"', learning_html)
+        self.assertIn("learning-flow-trigger", learning_html)
+        self.assertIn('data-panel="__workflow"', learning_html)
+        self.assertIn("learning-trigger", learning_html)
+        self.assertIn('data-panel="01"', learning_html)
+        self.assertIn("点击查看数据来源", learning_html)
+        self.assertIn("整份日报如何生成", learning_html)
+        self.assertIn("SOP 拆解", learning_html)
+        self.assertIn("API 网关", learning_html)
+        self.assertIn("自动复现人工 O32 汇总口径", learning_html)
+        self.assertIn("内部系统原始数据", learning_html)
+
+    def test_learning_mode_default_output_uses_learning_suffix(self):
+        import generate_report
+
+        self.assertTrue(hasattr(generate_report, "resolve_output_path"))
+        output_path = generate_report.resolve_output_path(
+            output_arg=None,
+            cfg={"output_dir": "reports"},
+            display_date="2026-06-23",
+            learning_mode=True,
+        )
+
+        self.assertEqual(SCRIPT_DIR.parent / "reports" / "2026-06-23-daily-learning.html", output_path)
+
+        custom_path = generate_report.resolve_output_path(
+            output_arg="custom.html",
+            cfg={"output_dir": "reports"},
+            display_date="2026-06-23",
+            learning_mode=True,
+        )
+
+        self.assertEqual(Path("custom.html"), custom_path)
+
+    def test_learning_mode_embeds_clickable_reference_files(self):
+        learning_html = render_report(
+            build_sample_data(),
+            charts={},
+            learning_mode=True,
+            learning_annotations={
+                "__workflow": {
+                    "标题": "整份日报如何生成",
+                    "主旨": "查看生成脚本和运行手册。",
+                    "引用文件": ["scripts/generate_report.py", "runbook.md"],
+                }
+            },
+        )
+
+        self.assertIn('id="learning-reference-panel"', learning_html)
+        self.assertIn("LEARNING_REFERENCES", learning_html)
+        self.assertIn('data-reference="scripts/generate_report.py"', learning_html)
+        self.assertIn('data-reference="runbook.md"', learning_html)
+        self.assertIn("def render_report", learning_html)
+        self.assertIn("生成交易日报", learning_html)
+        self.assertIn("openReference", learning_html)
+        self.assertIn("width: 520px", learning_html)
+
+    def test_learning_references_are_limited_to_safe_project_text_files(self):
+        import generate_report
+
+        refs = generate_report.load_learning_references({
+            "__workflow": {
+                "引用文件": [
+                    "scripts/generate_report.py",
+                    "../outside.md",
+                    "cache/cache.rar",
+                    "missing.md",
+                ]
+            }
+        })
+
+        self.assertIn("scripts/generate_report.py", refs)
+        self.assertNotIn("../outside.md", refs)
+        self.assertNotIn("cache/cache.rar", refs)
+        self.assertNotIn("missing.md", refs)
+
     def test_market_forecast_requires_indicators_and_methodology(self):
         forecast = build_market_forecast([], {}, {})
 
