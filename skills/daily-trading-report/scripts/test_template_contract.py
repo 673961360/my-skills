@@ -370,7 +370,6 @@ class TemplateContractTest(unittest.TestCase):
             "交易金额",
             "02 交收数据汇总",
             "03 市场预测汇总",
-            "预测结论",
             "04 资金市场分析",
             "现券市场分析",
             "权益市场分析",
@@ -492,7 +491,7 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("def render_report", learning_html)
         self.assertIn("生成交易日报", learning_html)
         self.assertIn("openReference", learning_html)
-        self.assertIn("width: 520px", learning_html)
+        self.assertIn("width: 620px", learning_html)
 
     def test_learning_references_are_limited_to_safe_project_text_files(self):
         import generate_report
@@ -993,10 +992,10 @@ class TemplateContractTest(unittest.TestCase):
         self.assertNotIn('alt="回购利率图"', forecast_html)
         self.assertNotIn("<td><strong>R001</strong></td>", forecast_html)
         self.assertNotIn("最新利率（%）", forecast_html)
-        self.assertIn("预测结论", forecast_html)
+        self.assertNotIn("预测结论", forecast_html)
+        self.assertNotIn("方法说明", forecast_html)
         self.assertIn("资产类型", forecast_html)
         self.assertIn("明日预测点位区间", forecast_html)
-        self.assertIn("方法说明", forecast_html)
         self.assertIn("资金面判断", forecast_html)
         self.assertNotIn("预测指标来源尚未确认", forecast_html)
         self.assertNotIn("趋势预测准确率", forecast_html)
@@ -1074,7 +1073,7 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn('<ol class="risk-list">', risk_segment)
         self.assertIn('<span class="risk-index">1.</span>', risk_segment)
         self.assertIn("今日规则引擎识别到 2 条风险线索", risk_segment)
-        self.assertIn("请密切关注明日到期回购资金的安排", risk_segment)
+        self.assertIn("本材料仅供内部参考使用", risk_segment)
         self.assertEqual(1, risk_segment.count('<div class="section">'))
         self.assertNotIn("规则引擎风险", risk_segment)
 
@@ -1116,7 +1115,6 @@ class TemplateContractTest(unittest.TestCase):
         funding_pos = html.index('<span class="icon">04</span> 资金市场分析')
         bond_pos = html.index("现券市场分析")
         segment = html[funding_pos:bond_pos]
-        self.assertIn("填写人：自动", segment)
         self.assertIn("▶公开市场操作", segment)
         self.assertIn("▶资金面状况", segment)
         self.assertNotIn("债券发行与到期", segment)
@@ -1130,7 +1128,7 @@ class TemplateContractTest(unittest.TestCase):
         bond_pos = html.index("现券市场分析")
         segment = html[section_pos:bond_pos]
 
-        self.assertIn("填写人：自动", segment)
+        self.assertIn("▶公开市场操作", segment)
         self.assertIn("▶公开市场操作（2026-06-17）", segment)
         self.assertIn("规模（亿元）", segment)
         self.assertIn("到期量（亿元）", segment)
@@ -1139,8 +1137,17 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("+120.00", segment)
         self.assertNotIn("债券发行与到期", segment)
         self.assertIn("▶资金面状况", segment)
-        # 整体状态由 Claude 生成，脚本不产出
+        # 整体状态/市场特征总结：overall/summary 为空时不渲染标题和占位，只留 HTML 注释供 Claude 注入
+        self.assertNotIn("▶整体状态", segment)
+        self.assertIn("<!-- 整体状态占位", segment)
+        self.assertNotIn("▶市场特征总结", segment)
+        self.assertIn("<!-- 市场特征总结占位", segment)
+        # 不再使用合并的"短评待精炼"占位
+        self.assertNotIn("短评待精炼", segment)
+        # overall/summary 为空时不显示实际内容，也不 dump QT 原文
         self.assertNotIn("整体状态：", segment)
+        self.assertNotIn("市场特征总结：", segment)
+        self.assertNotIn("资金面样例短评", segment)
         self.assertIn("隔夜（押利率/存单）", segment)
         self.assertIn("7天（押利率/存单/信用）", segment)
         self.assertIn("14天跨月", segment)

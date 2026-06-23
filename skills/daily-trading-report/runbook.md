@@ -73,9 +73,9 @@ uv run python scripts/generate_report.py --date {YYYYMMDD} --use-cache
    - **一级市场分析**：发行卡 + 明细表由脚本自动填充（`aggregate_primary_market`）；若资金日评含【一级简评】→ 按 `prompts/primary-commentary.md` 精炼为 3-5 句判断性总结
    - 注入方式：直接 `Edit` HTML 文件替换占位文本
    - **注入后逐栏检查（中间态→成品，每栏必过）**：
-     - [ ] 资金面状况：表格后 `analysis-box` 是原文 dump → 按 `prompts/funding-commentary.md` 精炼为整体状态 + 市场特征总结；已是 `整体状态：...` 格式 → 过
+     - [ ] 资金面状况：两个 HTML 注释占位（`<!-- 整体状态占位 -->` / `<!-- 市场特征总结占位 -->`）→ 按 `prompts/funding-commentary.md` 分别精炼，每个注释替换为 `<div class="inline-heading">▶整体状态/市场特征总结</div><div>精炼内容</div>`；已是 `inline-heading` + 内容 → 过
      - [ ] 现券市场分析：不得留 QT 原文 dump（含日评标题/逐条成交/OMO/Shibor/一级）→ 按 `prompts/bond-commentary.md` 精炼
-     - [ ] 权益市场分析：不得是"外部短评暂未获取"，也不得复述指数表点位 → 按 `prompts/stock-commentary.md` 补成交额/板块/驱动
+     - [ ] 权益市场分析：不得是"外部短评暂未获取"（`empty-data` 占位），也不得复述指数表点位 → 按 `prompts/stock-commentary.md` 补成交额/板块/驱动，整段 `<div class="empty-data">` 替换为 `<div class="analysis-box">` 包裹的精炼文字
      - [ ] 一级市场分析：有【一级简评】原文 dump → 按 `prompts/primary-commentary.md` 精炼；仅表格无文字 → 过
 4. **检查结果**：
    - 成功 → 读取 HTML，向用户展示摘要

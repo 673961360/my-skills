@@ -602,7 +602,6 @@
   <div class="section">
     <div class="section-title{% if learning_mode %} learning-trigger{% endif %}"{% if learning_mode %} data-panel="03" tabindex="0" role="button" aria-label="点击查看数据来源"{% endif %}><span class="icon">03</span> 市场预测汇总{% if learning_mode %}<span class="learning-icon" aria-hidden="true">ⓘ</span>{% endif %}</div>
 
-    <div class="template-subtitle">预测结论</div>
     {% if market_forecast.rows %}
     <table>
       <thead>
@@ -631,19 +630,17 @@
     {% else %}
     <div class="empty-data">{{ market_forecast.conclusion }}</div>
     {% endif %}
-
-    <div class="inline-heading">方法说明</div>
-    <div class="analysis-box">{{ market_forecast.methodology }}</div>
   </div>
 
   <!-- ═══════════════ 04 资金市场分析 ═══════════════ -->
   <div class="section">
     <div class="section-title{% if learning_mode %} learning-trigger{% endif %}"{% if learning_mode %} data-panel="04" tabindex="0" role="button" aria-label="点击查看数据来源"{% endif %}><span class="icon">04</span> 资金市场分析{% if learning_mode %}<span class="learning-icon" aria-hidden="true">ⓘ</span>{% endif %}</div>
-    <p class="muted-note">填写人：自动</p>
 
     {% if funding_market_status.overall %}
     <div class="inline-heading">▶整体状态</div>
-    <div class="analysis-box">{{ funding_market_status.overall }}</div>
+    <div>{{ funding_market_status.overall }}</div>
+    {% else %}
+    <!-- 整体状态占位：待 Claude 精炼 -->
     {% endif %}
 
     <div class="inline-heading">▶公开市场操作{% if money_market.has_data %}（{{ money_market.data_date }}）{% endif %}</div>
@@ -706,19 +703,15 @@
       <li><strong>情绪指数：</strong>{{ funding_market_status.sentiment_index }}</li>
     </ul>
     {% endif %}
+    {% else %}
+    <div class="empty-data">{{ funding_market_status.fallback | default("暂无有效消息") }}</div>
+    {% endif %}
+
     {% if funding_market_status.summary %}
     <div class="inline-heading">▶市场特征总结</div>
-    <div class="analysis-box">{{ funding_market_status.summary }}</div>
-    {% endif %}
-    {% if not funding_market_status.overall and not funding_market_status.summary %}
-    <div class="analysis-box">{{ funding_market_status.raw_text }}</div>
-    {% endif %}
+    <div>{{ funding_market_status.summary }}</div>
     {% else %}
-    {% if funding_market_status.raw_text %}
-    <div class="analysis-box">{{ funding_market_status.raw_text }}</div>
-    {% else %}
-    <div class="analysis-box">{{ funding_market_status.fallback | default(market_commentary.funding) }}</div>
-    {% endif %}
+    <!-- 市场特征总结占位：待 Claude 精炼 -->
     {% endif %}
   </div>
 
