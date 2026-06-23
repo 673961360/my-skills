@@ -1258,13 +1258,29 @@ def build_funding_market_status(daily_commentary: dict, fallback_text: str = "")
     period_order = {"早盘（开盘）": 0, "OMO操作后": 1, "午前": 2, "午后（初）": 3, "尾盘": 4}
     rows.sort(key=lambda row: period_order.get(row["时段"], 99))
     period_count = len({row["时段"] for row in rows})
-    if period_count < 2:
-        return {"available": False, "writer": "自动", "fallback": fallback_text or "暂无有效消息"}
 
-    # 拼接全部 QT 原文作为 raw_text（供 Claude 精炼）
+    # 拼接全部 QT 原文（提前计算，供两个返回路径共用）
     all_text = "\n".join(str(report.get("content", "")) for report in reports) or "\n".join(all_text_parts)
+
+    if period_count < 2:
+        cleaned = _clean_commentary_body(all_text)
+        raw = (
+            f"<!-- ⚠️ 中间态：以下为 QT 日评原文 dump，待 Claude 精炼 → 禁止直接交付 -->\n[待精炼]\n{cleaned}"
+            if cleaned.strip() else ""
+        )
+        return {
+            "available": False, "writer": "自动",
+            "raw_text": raw,
+            "fallback": fallback_text or "暂无有效消息",
+        }
+
     # 提取情绪指数（条件展示）
     sentiment_index = _extract_sentiment_index(all_text)
+    cleaned = _clean_commentary_body(all_text)
+    raw = (
+        f"<!-- ⚠️ 中间态：以下为 QT 日评原文 dump，待 Claude 精炼 → 禁止直接交付 -->\n[待精炼]\n{cleaned}"
+        if cleaned.strip() else ""
+    )
 
     return {
         "available": True,
@@ -1272,7 +1288,7 @@ def build_funding_market_status(daily_commentary: dict, fallback_text: str = "")
         "overall": "",   # 留空，待 Claude 按 funding-commentary.md 精炼后填入
         "summary": "",   # 留空，待 Claude 按 funding-commentary.md 精炼后填入
         "rows": rows,
-        "raw_text": _clean_commentary_body(all_text),  # 原文 dump（中间态，Claude 精炼后删除）
+        "raw_text": raw,  # 原文 dump（中间态，Claude 精炼后替换）
         "sentiment_index": sentiment_index,
         "fallback": fallback_text or "暂无有效消息",
     }

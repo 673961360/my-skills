@@ -208,7 +208,7 @@
   }
   .risk-list li {
     display: grid;
-    grid-template-columns: 22px 1fr;
+    grid-template-columns: 26px 1fr;
     gap: 8px;
     color: #c62828;
     font-size: 12px;
@@ -443,7 +443,7 @@
     <!-- ══════════════ 交易笔数 ═══════════════ -->
     <div class="template-subtitle">交易笔数</div>
     {% if trade_count_hourly.total is defined %}
-    <p class="muted-note">今日交易笔数合计{{ trade_count_hourly.total }}笔。</p>
+    <p>今日交易笔数合计{{ trade_count_hourly.total }}笔。</p>
     {% endif %}
 
     {% if trade_count_hourly and charts.trade_count %}
@@ -499,7 +499,7 @@
     <!-- ═══════════════ 交易金额 ═══════════════ -->
     <div class="template-subtitle">交易金额</div>
     {% if trade_amount_by_direction.total is defined %}
-    <p class="muted-note">今日交易金额合计{{ "%.2f"|format(trade_amount_by_direction.total / 100000000) }}亿。</p>
+    <p>今日交易金额合计{{ "%.2f"|format(trade_amount_by_direction.total / 100000000) }}亿。</p>
     {% endif %}
 
     {% if trade_amount_by_direction.amounts is defined and charts.trade_price %}
@@ -549,7 +549,7 @@
     <div class="section-title"><span class="icon">02</span> 交收数据汇总</div>
 
     {% if emergency_repo.has_data %}
-    <p>今日应急金额为{{ "%.0f"|format(emergency_repo.总金额万元) }}万元</p>
+    <p>今日应急金额为{{ "%.0f"|format(emergency_repo.总金额万元) }}万元。</p>
 
     <table>
       <thead>
@@ -575,7 +575,7 @@
     </table>
 
     {% else %}
-    <div class="empty-data">暂无相关数据</div>
+    <div class="empty-data">今日无应急</div>
     {% endif %}
   </div>
 
@@ -583,7 +583,6 @@
   <div class="section">
     <div class="section-title"><span class="icon">03</span> 市场预测汇总</div>
 
-    <div class="template-subtitle">预测结论</div>
     {% if market_forecast.rows %}
     <table>
       <thead>
@@ -620,8 +619,6 @@
   <!-- ═══════════════ 04 资金市场分析 ═══════════════ -->
   <div class="section">
     <div class="section-title"><span class="icon">04</span> 资金市场分析</div>
-
-    <p class="muted-note">填写人：{{ funding_market_status.writer | default("自动") }}</p>
 
     {% if funding_market_status.overall %}
     <div class="inline-heading">▶整体状态</div>
@@ -696,7 +693,11 @@
     <div class="analysis-box">{{ funding_market_status.raw_text }}</div>
     {% endif %}
     {% else %}
+    {% if funding_market_status.raw_text %}
+    <div class="analysis-box">{{ funding_market_status.raw_text }}</div>
+    {% else %}
     <div class="analysis-box">{{ funding_market_status.fallback | default(market_commentary.funding) }}</div>
+    {% endif %}
     {% endif %}
   </div>
 
@@ -805,9 +806,9 @@
     <div class="section-title">风险提示</div>
 
     <ol class="risk-list">
-      {% for tip in risk_tips %}
-      <li><span class="risk-index">{{ loop.index }}.</span><span>{{ tip }}</span></li>
-      {% endfor %}
+      <li><span class="risk-index">1、</span><span>本材料仅供内部参考使用，未经允许不得外发。</span></li>
+      <li><span class="risk-index">2、</span><span>材料中的市场分析和趋势预测等相关信息不构成收益承诺，仅供参考，具体以市场实际行情为准。</span></li>
+      <li><span class="risk-index">3、</span><span>我们力求但不保证材料中信息的准确性和完整性，也不保证材料中观点或陈述不会发生任何变更。</span></li>
     </ol>
   </div>
 
