@@ -1,11 +1,22 @@
 #!/usr/bin/env python3
-"""交易日报自动生成主脚本。
+"""日报生成的确定性流水线入口。
+
+本文件是整份日报的"骨架"——负责所有可复跑、可审计的确定性步骤：
+  配置加载 → API 取数（O32/头寸/资金事件/QT 日评）→ 代码计算汇总
+  → matplotlib 渲染图表 → 内置脱敏 → Jinja2 输出 HTML
+
+不负责：
+  - 短评精炼（资金/现券/一级栏的原文 dump 由脚本填入中间态，精炼由 AI 按 prompts/*.md 完成）
+  - 外部搜索注入（现券/权益当日解读由 AI 通过 WebSearch 补入）
+  - 降级决策（数据缺失时的取舍由 AI 判断）
+
+简言之：脚本保数字准确和图表稳定，AI 保短评可读和解读时效。两者分工明确，合在一起才是完整的交易日报。
 
 用法：
     python generate_report.py                    # 生成当日日报
     python generate_report.py --date 20260621    # 指定日期
     python generate_report.py --date 20260621 --output custom.html  # 指定输出路径
-    python generate_report.py --learning           # 生成学习模式日报
+    python generate_report.py --learning           # 生成分享模式日报
 
 输出：
     reports/YYYY-MM-DD-daily.html
@@ -217,7 +228,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--learning",
         action="store_true",
-        help="输出学习模式日报（含数据来源标注面板）",
+        help="输出分享模式日报（含数据来源标注面板）",
     )
     parser.add_argument(
         "--equity-commentary",

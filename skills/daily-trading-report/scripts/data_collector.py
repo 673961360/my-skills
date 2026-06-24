@@ -1302,8 +1302,8 @@ def build_funding_market_status(daily_commentary: dict, fallback_text: str = "")
     return {
         "available": True,
         "writer": "自动",
-        "overall": "",   # 留空，待 Claude 按 funding-commentary.md 精炼后填入
-        "summary": "",   # 留空，待 Claude 按 funding-commentary.md 精炼后填入
+        "overall": "",   # 留空，待 Claude 按 资金交易员短评角色.md 精炼后填入
+        "summary": "",   # 留空，待 Claude 按 资金交易员短评角色.md 精炼后填入
         "rows": rows,
         "raw_text": raw,  # 原文 dump（中间态，Claude 精炼后替换）
         "sentiment_index": sentiment_index,

@@ -12,7 +12,7 @@ uv run python generate_report.py --date {YYYYMMDD}
 可选参数：
 - `--no-charts`：跳过图表生成（加速调试，QT 采集仍需 20-30 秒）
 - `--output custom.html`：指定输出路径（默认 `reports/YYYY-MM-DD-daily.html`）
-- `--learning`：生成学习模式日报，输出 `reports/YYYY-MM-DD-daily-learning.html`，每个主板块标题可点击查看数据来源、加工方式、可信度和注意事项
+- `--learning`：生成分享模式日报，输出 `reports/YYYY-MM-DD-daily-learning.html`，每个主板块标题可点击查看数据来源、加工方式、可信度和注意事项
 
 首次运行或依赖变更时：
 ```bash
@@ -65,18 +65,18 @@ uv run python scripts/generate_report.py --date {YYYYMMDD} --use-cache
 1. **确认日期**：默认当日，用户可指定。向用户确认日期和星期
 2. **运行脚本**：`uv run python generate_report.py --date YYYYMMDD`
    - 若用于培训或口径讲解：`uv run python generate_report.py --date YYYYMMDD --learning`
-3. **Claude 注入短评（必须执行，不可跳过）**：
-   脚本输出的 HTML 中现券/权益栏为占位文本。Claude 必须通过 WebSearch 获取当日市场信息并注入：
-   - **现券市场分析**：QT 现券日评原文 dump 由脚本填入（**中间态**），按 `prompts/bond-commentary.md` 精炼为 3-5 句，剔除 OMO/资金面/一级（他栏已有）；QT 无现券日评才 WebSearch "YYYY年M月D日 债券 利率债 收盘"
-   - **权益市场分析**：按 `prompts/stock-commentary.md` 的查询策略（域名限定优先，非精确日期长句）WebSearch 当日 A 股收盘，整合为成交额/板块/驱动的**增量判断**（指数点位引用上方表格，不复述）
-   - **资金市场分析**：QT 资金日评原文 dump 已由脚本填入，按 `prompts/funding-commentary.md` 精炼为 3-5 句判断性总结（若模板已含 QT 原文则无需额外搜索）
-   - **一级市场分析**：发行卡 + 明细表由脚本自动填充（`aggregate_primary_market`）；若资金日评含【一级简评】→ 按 `prompts/primary-commentary.md` 精炼为 3-5 句判断性总结
+3. **AI 注入短评（必须执行，不可跳过）**：
+   脚本输出的 HTML 中现券/权益栏为占位文本。AI 必须通过 WebSearch 获取当日市场信息并注入：
+   - **现券市场分析**：QT 现券日评原文 dump 由脚本填入（**中间态**），按 `prompts/现券交易员短评角色.md` 精炼为 3-5 句，剔除 OMO/资金面/一级（他栏已有）；QT 无现券日评才 WebSearch "YYYY年M月D日 债券 利率债 收盘"
+   - **权益市场分析**：按 `prompts/权益交易员短评角色.md` 的查询策略（域名限定优先，非精确日期长句）WebSearch 当日 A 股收盘，整合为成交额/板块/驱动的**增量判断**（指数点位引用上方表格，不复述）
+   - **资金市场分析**：QT 资金日评原文 dump 已由脚本填入，按 `prompts/资金交易员短评角色.md` 精炼为 3-5 句判断性总结（若模板已含 QT 原文则无需额外搜索）
+   - **一级市场分析**：发行卡 + 明细表由脚本自动填充（`aggregate_primary_market`）；若资金日评含【一级简评】→ 按 `prompts/一级交易员短评角色.md` 精炼为 3-5 句判断性总结
    - 注入方式：直接 `Edit` HTML 文件替换占位文本
    - **注入后逐栏检查（中间态→成品，每栏必过）**：
-     - [ ] 资金面状况：两个 HTML 注释占位（`<!-- 整体状态占位 -->` / `<!-- 市场特征总结占位 -->`）→ 按 `prompts/funding-commentary.md` 分别精炼，每个注释替换为 `<div class="inline-heading">▶整体状态/市场特征总结</div><div>精炼内容</div>`；已是 `inline-heading` + 内容 → 过
-     - [ ] 现券市场分析：不得留 QT 原文 dump（含日评标题/逐条成交/OMO/Shibor/一级）→ 按 `prompts/bond-commentary.md` 精炼
-     - [ ] 权益市场分析：不得是"外部短评暂未获取"（`empty-data` 占位），也不得复述指数表点位 → 按 `prompts/stock-commentary.md` 补成交额/板块/驱动，整段 `<div class="empty-data">` 替换为 `<div class="analysis-box">` 包裹的精炼文字
-     - [ ] 一级市场分析：有【一级简评】原文 dump → 按 `prompts/primary-commentary.md` 精炼；仅表格无文字 → 过
+     - [ ] 资金面状况：两个 HTML 注释占位（`<!-- 整体状态占位 -->` / `<!-- 市场特征总结占位 -->`）→ 按 `prompts/资金交易员短评角色.md` 分别精炼，每个注释替换为 `<div class="inline-heading">▶整体状态/市场特征总结</div><div>精炼内容</div>`；已是 `inline-heading` + 内容 → 过
+     - [ ] 现券市场分析：不得留 QT 原文 dump（含日评标题/逐条成交/OMO/Shibor/一级）→ 按 `prompts/现券交易员短评角色.md` 精炼
+     - [ ] 权益市场分析：不得是"外部短评暂未获取"（`empty-data` 占位），也不得复述指数表点位 → 按 `prompts/权益交易员短评角色.md` 补成交额/板块/驱动，整段 `<div class="empty-data">` 替换为 `<div class="analysis-box">` 包裹的精炼文字
+     - [ ] 一级市场分析：有【一级简评】原文 dump → 按 `prompts/一级交易员短评角色.md` 精炼；仅表格无文字 → 过
 4. **检查结果**：
    - 成功 → 读取 HTML，向用户展示摘要
    - 失败 → 根据错误信息排查（见下方错误表）

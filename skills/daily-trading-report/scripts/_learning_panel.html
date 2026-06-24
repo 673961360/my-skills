@@ -1,9 +1,8 @@
-<!-- 数据来源面板（学习模式） -->
+<!-- 数据来源面板（分享模式） -->
 <div id="learning-panel" class="learning-panel" aria-hidden="true">
   <div class="learning-panel-header">
     <div>
-      <div class="learning-panel-kicker">学习模式</div>
-      <div class="learning-panel-title">学习讲解</div>
+      <div class="learning-panel-kicker">分享模式</div>
     </div>
     <button class="learning-panel-close" type="button" aria-label="关闭面板">×</button>
   </div>
@@ -15,10 +14,18 @@
       <div class="learning-panel-kicker">引用文件</div>
       <div class="learning-reference-title" id="learning-reference-title">未选择文件</div>
     </div>
-    <button class="learning-reference-close" type="button" aria-label="关闭引用文件">×</button>
+    <div class="learning-reference-header-right">
+      <div class="learning-reference-font-controls">
+        <button class="learning-font-btn" id="learning-font-minus" type="button" title="缩小字体">A−</button>
+        <span class="learning-font-size" id="learning-font-size">16px</span>
+        <button class="learning-font-btn" id="learning-font-plus" type="button" title="放大字体">A+</button>
+      </div>
+      <button class="learning-reference-close" type="button" aria-label="关闭引用文件">×</button>
+    </div>
   </div>
   <div class="learning-reference-path" id="learning-reference-path"></div>
-  <pre class="learning-reference-code-wrap"><code id="learning-reference-code"></code></pre>
+  <pre class="learning-reference-code-wrap" id="learning-reference-code-wrap"><code id="learning-reference-code"></code></pre>
+  <div class="learning-reference-resize-handle" id="learning-reference-resize-handle"></div>
 </div>
 <template id="learning-reference-index">
   {% for path, ref in learning_references.items() %}
@@ -99,19 +106,15 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 18px 18px 14px;
+    padding: 14px 18px 12px;
     background: #0f5d9b;
     color: #fff;
   }
   .learning-panel-kicker {
-    font-size: 11px;
+    font-size: 13px;
+    font-weight: 700;
     opacity: 0.78;
     letter-spacing: 1px;
-  }
-  .learning-panel-title {
-    font-size: 18px;
-    font-weight: 700;
-    margin-top: 2px;
   }
   .learning-panel-close {
     width: 30px;
@@ -167,6 +170,14 @@
     border-radius: 6px;
     color: #1f2f46;
     font-weight: 600;
+  }
+  .learning-summary ul {
+    margin: 0;
+    padding-left: 18px;
+    list-style-position: outside;
+  }
+  .learning-summary li {
+    margin: 3px 0;
   }
   .learning-block {
     margin: 12px 0;
@@ -237,6 +248,13 @@
     font-weight: 700;
     margin-bottom: 4px;
   }
+  .learning-trust ul {
+    margin: 0;
+    padding-left: 18px;
+  }
+  .learning-trust li {
+    margin: 3px 0;
+  }
   .learning-source-map {
     display: grid;
     gap: 7px;
@@ -261,21 +279,22 @@
     color: #607086;
   }
   .learning-reference-links {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 7px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
   }
   .learning-reference-link {
-    width: 100%;
-    padding: 8px 9px;
+    max-width: 100%;
+    padding: 3px 7px;
     border: 1px solid #bed4f0;
-    border-radius: 4px;
+    border-radius: 12px;
     background: #f8fbff;
     color: #123f6d;
     font: inherit;
-    font-size: 12px;
-    font-weight: 700;
+    font-size: 11px;
+    font-weight: 600;
     text-align: left;
+    overflow-wrap: anywhere;
     cursor: pointer;
   }
   .learning-reference-link:hover,
@@ -283,13 +302,31 @@
     background: #dbeafe;
     outline: none;
   }
+  .learning-inline-reference {
+    display: inline;
+    padding: 0 2px;
+    border: 0;
+    background: transparent;
+    color: #0f5d9b;
+    font: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
+  .learning-inline-reference:hover,
+  .learning-inline-reference:focus-visible {
+    color: #123f6d;
+    outline: none;
+  }
   .learning-reference-panel {
     position: fixed;
     top: 18px;
     left: 16px;
-    z-index: 49;
-    width: min(600px, calc((100vw - 320px) / 2));
-    min-width: 380px;
+    z-index: 61;
+    width: min(780px, 58vw);
+    min-width: 480px;
+    max-width: calc(100vw - 80px);
     max-height: calc(100vh - 36px);
     display: none;
     flex-direction: column;
@@ -300,6 +337,7 @@
     box-shadow: 0 12px 30px rgba(15, 23, 42, 0.2);
     overflow: hidden;
     font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+    user-select: none;
   }
   .learning-reference-panel.open {
     display: flex;
@@ -336,6 +374,66 @@
     background: rgba(255, 255, 255, 0.22);
     outline: none;
   }
+  .learning-reference-header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+  }
+  .learning-reference-font-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .learning-font-btn {
+    width: 26px;
+    height: 26px;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .learning-font-btn:hover,
+  .learning-font-btn:focus-visible {
+    background: rgba(255, 255, 255, 0.25);
+    outline: none;
+  }
+  .learning-font-size {
+    display: inline-block;
+    min-width: 36px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .learning-reference-resize-handle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: col-resize;
+    z-index: 2;
+    background: transparent;
+    transition: background 150ms ease;
+  }
+  .learning-reference-resize-handle:hover,
+  .learning-reference-resize-handle.active {
+    background: rgba(15, 93, 155, 0.18);
+  }
+  .learning-reference-panel.resizing {
+    cursor: col-resize;
+  }
+  .learning-reference-panel.resizing .learning-reference-code-wrap {
+    pointer-events: none;
+  }
+  .learning-reference-code-wrap {
+    transition: font-size 120ms ease;
+  }
   .learning-reference-path {
     padding: 8px 12px;
     border-bottom: 1px solid #d7e6f5;
@@ -351,7 +449,7 @@
     overflow: auto;
     color: #172033;
     background: #fff;
-    font-size: 11px;
+    font-size: 16px;
     line-height: 1.55;
     font-family: Consolas, "Courier New", monospace;
     white-space: pre;
@@ -379,7 +477,10 @@
       width: auto;
       min-width: 0;
       max-height: 46vh;
-      z-index: 55;
+      z-index: 65;
+    }
+    .learning-reference-resize-handle {
+      display: none;
     }
     .learning-panel.open {
       bottom: 0;
@@ -422,8 +523,18 @@
   const referenceTitle = document.getElementById("learning-reference-title");
   const referencePath = document.getElementById("learning-reference-path");
   const referenceCode = document.getElementById("learning-reference-code");
+  const referenceCodeWrap = document.getElementById("learning-reference-code-wrap");
   const referenceCloseBtn = referencePanel.querySelector(".learning-reference-close");
+  const resizeHandle = document.getElementById("learning-reference-resize-handle");
+  const fontMinusBtn = document.getElementById("learning-font-minus");
+  const fontPlusBtn = document.getElementById("learning-font-plus");
+  const fontSizeDisplay = document.getElementById("learning-font-size");
   let activeSection = null;
+  let inlineReferenceTokens = null;
+  let codeFontSize = 16;
+  const FONT_SIZE_MIN = 9;
+  const FONT_SIZE_MAX = 20;
+  const FONT_SIZE_STEP = 1;
 
   function escapeHtml(value) {
     return String(value == null ? "" : value)
@@ -434,13 +545,64 @@
       .replace(/'/g, "&#39;");
   }
 
+  function buildInlineReferenceTokens() {
+    if (inlineReferenceTokens) {
+      return inlineReferenceTokens;
+    }
+    const tokenToPath = new Map();
+    const ambiguousTokens = new Set();
+    Object.entries(LEARNING_REFERENCES || {}).forEach(([path, ref]) => {
+      [path, ref && ref.path, ref && ref.title].filter(Boolean).forEach(label => {
+        const token = String(label);
+        if (!token) {
+          return;
+        }
+        if (tokenToPath.has(token) && tokenToPath.get(token) !== path) {
+          ambiguousTokens.add(token);
+          return;
+        }
+        tokenToPath.set(token, path);
+      });
+    });
+    inlineReferenceTokens = Array.from(tokenToPath.entries())
+      .filter(([token]) => !ambiguousTokens.has(token))
+      .map(([token, path]) => ({ token: escapeHtml(token), path }))
+      .sort((a, b) => b.token.length - a.token.length);
+    return inlineReferenceTokens;
+  }
+
+  function renderInlineReferences(value) {
+    const text = escapeHtml(value == null || value === "" ? "暂无说明" : value);
+    const tokens = buildInlineReferenceTokens();
+    if (!tokens.length) {
+      return text;
+    }
+    let output = "";
+    let index = 0;
+    while (index < text.length) {
+      const match = tokens.find(item => item.token && text.startsWith(item.token, index));
+      if (match) {
+        output += '<button class="learning-inline-reference" type="button" data-reference="' +
+          escapeHtml(match.path) +
+          '">' +
+          match.token +
+          "</button>";
+        index += match.token.length;
+      } else {
+        output += text[index];
+        index += 1;
+      }
+    }
+    return output;
+  }
+
   function renderValue(value) {
     if (Array.isArray(value)) {
       return "<ul>" + value.map(item => {
         if (item && typeof item === "object") {
-          return "<li>" + escapeHtml(item["阶段"] || item["标题"] || "") + "：" + escapeHtml(item["说明"] || item["内容"] || "") + "</li>";
+          return "<li>" + renderInlineReferences(item["阶段"] || item["标题"] || "") + "：" + renderInlineReferences(item["说明"] || item["内容"] || "") + "</li>";
         }
-        return "<li>" + escapeHtml(item) + "</li>";
+        return "<li>" + renderInlineReferences(item) + "</li>";
       }).join("") + "</ul>";
     }
     if (value && typeof value === "object") {
@@ -448,11 +610,11 @@
         '<div class="learning-source-row"><span class="learning-source-key">' +
         escapeHtml(key) +
         "</span>" +
-        escapeHtml(text) +
+        renderInlineReferences(text) +
         "</div>"
       )).join("") + "</div>";
     }
-    return "<p>" + escapeHtml(value || "暂无说明") + "</p>";
+    return "<p>" + renderInlineReferences(value) + "</p>";
   }
 
   function renderBlock(icon, title, value) {
@@ -483,9 +645,9 @@
       '<div class="learning-flow-step"><span class="learning-flow-index">' +
       (index + 1) +
       '</span><div><span class="learning-flow-title">' +
-      escapeHtml(step["阶段"] || step["标题"] || "") +
+      renderInlineReferences(step["阶段"] || step["标题"] || "") +
       "</span>" +
-      escapeHtml(step["说明"] || step["内容"] || "") +
+      renderValue(step["说明"] || step["内容"] || "") +
       "</div></div>"
     )).join("") + "</div>";
   }
@@ -534,7 +696,7 @@
     if (!paths.length) {
       return "";
     }
-    return '<section class="learning-block"><h4><span>📄</span>引用文件</h4><div class="learning-reference-links">' +
+    return '<section class="learning-block learning-reference-block"><h4><span>📄</span>相关文件</h4><div class="learning-reference-links">' +
       paths.map(path => (
         '<button class="learning-reference-link" type="button" data-reference="' +
         escapeHtml(path) +
@@ -563,6 +725,44 @@
     referencePanel.setAttribute("aria-hidden", "true");
   }
 
+  function setCodeFontSize(size) {
+    codeFontSize = Math.max(FONT_SIZE_MIN, Math.min(FONT_SIZE_MAX, size));
+    referenceCodeWrap.style.fontSize = codeFontSize + "px";
+    fontSizeDisplay.textContent = codeFontSize + "px";
+  }
+
+  fontMinusBtn.addEventListener("click", function() {
+    setCodeFontSize(codeFontSize - FONT_SIZE_STEP);
+  });
+  fontPlusBtn.addEventListener("click", function() {
+    setCodeFontSize(codeFontSize + FONT_SIZE_STEP);
+  });
+
+  /* 右侧拖拽拉伸 */
+  resizeHandle.addEventListener("mousedown", function(e) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = referencePanel.offsetWidth;
+    referencePanel.classList.add("resizing");
+    resizeHandle.classList.add("active");
+
+    function onMouseMove(ev) {
+      const delta = ev.clientX - startX;
+      const newWidth = Math.max(380, Math.min(startWidth + delta, window.innerWidth - 80));
+      referencePanel.style.width = newWidth + "px";
+    }
+
+    function onMouseUp() {
+      referencePanel.classList.remove("resizing");
+      resizeHandle.classList.remove("active");
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    }
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  });
+
   function renderPanelContent(key) {
     const data = LEARNING_ANNOTATIONS[key];
     if (!data) {
@@ -573,8 +773,7 @@
     panelBody.innerHTML =
       '<div class="learning-source-title">' + escapeHtml(data["标题"] || key) + "</div>" +
       renderTags(data["标签"]) +
-      '<div class="learning-summary">' + escapeHtml(lead) + "</div>" +
-      renderReferences(data["引用文件"]) +
+      '<div class="learning-summary">' + renderValue(lead) + "</div>" +
       renderFlow(data["流程"]) +
       renderSections(data["sections"]) +
       renderBlock("🔗", "数据怎么取", data["来源"]) +
@@ -582,9 +781,9 @@
       renderTrust(data["可信度"]) +
       renderBlock("🛡", "合规处理", data["合规"]) +
       renderBlock("✍", "提示词替代哪一步", data["提示词"]) +
-      renderBlock("👤", "人工复核点", data["人工复核"]) +
       renderBlock("🧩", "如何沉淀成 Skill", data["Skill沉淀"]) +
-      renderBlock("⚠️", "讲解时提醒", data["注意"]);
+      renderBlock("⚠️", "补充说明", data["注意"]) +
+      renderReferences(data["引用文件"]);
   }
 
   function setActiveTrigger(key) {
@@ -630,7 +829,7 @@
   });
 
   panelBody.addEventListener("click", event => {
-    const button = event.target.closest(".learning-reference-link");
+    const button = event.target.closest(".learning-reference-link, .learning-inline-reference");
     if (button) {
       openReference(button.dataset.reference);
     }

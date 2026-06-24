@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>创金合信基金交易部 · 交易日报{% if learning_mode %}（学习模式）{% endif %} · {{ template_date | default(display_date) }}（{{ weekday }}）</title>
+<title>创金合信基金交易部 · 交易日报{% if learning_mode %}（分享模式）{% endif %} · {{ template_date | default(display_date) }}（{{ weekday }}）</title>
 <style>
   /* ── 全局 ── */
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -408,7 +408,7 @@
     <div class="header-left">
       <div>
         <h1>创金合信基金交易部</h1>
-        <h2>交易日报{% if learning_mode %}<span class="mode-badge">学习模式</span>{% endif %}</h2>
+        <h2>交易日报{% if learning_mode %}<span class="mode-badge">分享模式</span>{% endif %}</h2>
       </div>
     </div>
     <div class="header-right">

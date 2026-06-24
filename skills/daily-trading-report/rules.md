@@ -14,10 +14,10 @@
 | `scripts/report_template.html` | Jinja2 HTML 模板 |
 | `config.json` | API + Oracle 配置 |
 | `reference/API接口接入手册.md` | 完整接口文档 |
-| `prompts/funding-commentary.md` | 资金市场分析精炼 prompt |
-| `prompts/bond-commentary.md` | 现券市场分析精炼 prompt |
-| `prompts/stock-commentary.md` | 权益市场分析生成 prompt |
-| `prompts/primary-commentary.md` | 一级市场分析精炼 prompt |
+| `prompts/资金交易员短评角色.md` | 资金市场分析精炼 prompt |
+| `prompts/现券交易员短评角色.md` | 现券市场分析精炼 prompt |
+| `prompts/权益交易员短评角色.md` | 权益市场分析生成 prompt |
+| `prompts/一级交易员短评角色.md` | 一级市场分析精炼 prompt |
 
 ## 数据计算原则
 
@@ -41,6 +41,23 @@
 - SQL → `POST {base_url}/admin/dataquery/execute/{api_id}` + JSON body
 - API → `POST {base_url}/admin/apiquery/proxy/{api_id}` + form/json body
 - 认证 → `Authorization: Bearer {api_key}`
+
+### 市场预测取数总览（03 板块）
+
+市场预测汇总表的多路信号来自 **API + 外部行情 + QT 短评** 三个渠道，不是单一数据源：
+
+| 信号 | 数据来源 | 用途 |
+|------|---------|------|
+| 回购利率（R001/DR001/R007/DR007） | `cat_sql_trade_0012` 银行间回购实时行情 | 资金面打分（利率高低 + 日内振幅） |
+| OMO 净投放 / 政府债缴款 | `cat_sql_trade_0013` 资金事件日历 | 资金扰动校验（净投放→偏松，缴款→偏紧） |
+| 资金面情绪 | QT 资金日评（Oracle） | 多篇去重后取多数判断（偏松/均衡/不松），计入资金面打分 |
+| 现券情绪 | QT 现券日评（Oracle） | 方向词扫描（上行/走弱/卖方 vs 下行/走强/买方），计入现券打分 |
+| 国债 1Y/10Y 收盘收益率 | 中国货币网债券收益率曲线（`external_market.py`） | 现券打分（2.2%↑→偏弱，1.8%↓→偏强）+ 点位外推 |
+| 上证指数 / 创业板指 | 新浪财经 + 腾讯财经（`external_market.py`） | 权益行：当前点位 + 短线动量外推 |
+| 1Y 大行 CD 发行利率 | QT 资金日评【一级简评】文本解析 | 一级 CD 行：从短评中抽取发行利率 |
+| 1Y CD 二级利差方向 | QT 资金日评【一级简评】文本解析 | 一级 CD 行：正/走阔/收窄判断 |
+
+> 打分逻辑见 `data_collector.py:build_market_forecast()`，数据源详细血缘见 `data-sources.md`"03 市场预测汇总"节。
 
 ### 资金事件日历（cat_sql_trade_0013）
 
@@ -71,6 +88,7 @@
 | STAT_DT 日期偏移 | UTC 时间 | UTC 日期 + 1 = 北京日期 |
 | Windows GBK 编码 | emoji 输出到 cmd | `PYTHONIOENCODING=utf-8` |
 | 历史日报数据为空 | 测试环境 O32/API 不支持历史查询，返回 0 条 | 必须 `--use-cache` 使用 `cache/` 中已有缓存 |
+| 0008 响应结构非标准 | `cat_api_trade_0008` 返回两层嵌套 `data._embedded.vos[].inqResultMgrQueryInfos[]`，**非**  usual `data.body.rows` | 解析时用 `result.get("data", {}).get("_embedded", {}).get("vos", [])` 逐层取 |
 
 ## 关键决策
 
@@ -98,16 +116,16 @@
 - **O32 / API（测试环境）**：仅保留当日/近期数据，查**历史日期**通常返回 0 条（非报错、非 403）；查当日或近期才有数据
 - **降级**：O32/API 为 0 时按 `template-contract.md` 占位规则降级，不影响其余板块
 
-## Claude 注入短评（日报生成流程强制步骤）
+## AI 注入短评（日报生成流程强制步骤）
 
-**脚本只出骨架，Claude 必须补短评。** 生成日报时，脚本输出的 HTML 中现券/权益栏为占位文本（`暂无有效消息` / `外部短评暂未获取`），**Claude 必须执行以下操作，不可跳过**：
+**脚本只出骨架，AI 必须补短评。** 生成日报时，脚本输出的 HTML 中现券/权益栏为占位文本（`暂无有效消息` / `外部短评暂未获取`），**AI 必须执行以下操作，不可跳过**：
 
 | 板块 | 数据来源 | 操作 |
 |------|---------|------|
 | 现券市场分析 | QT 现券日评 或 WebSearch | QT 有现券日评→精炼；QT 无→WebSearch"YYYY年M月D日 债券市场 利率债 收盘"获取国债期货/收益率/资金面/机构观点 |
 | 权益市场分析 | WebSearch | WebSearch"YYYY年M月D日 A股市场收盘总结"获取指数涨跌/成交额/板块轮动/驱动因素 |
-| 资金市场分析 | QT 资金日评（脚本已填原文） | 按 `prompts/funding-commentary.md` 精炼为 3-5 句判断性总结 |
-| 一级市场分析 | QT【一级简评】+ 脚本发行数据 | 若资金日评含【一级简评】→ 按 `prompts/primary-commentary.md` 精炼为 3-5 句判断性总结；脚本自动（卡片+明细表）→ 过 |
+| 资金市场分析 | QT 资金日评（脚本已填原文） | 按 `prompts/资金交易员短评角色.md` 精炼为 3-5 句判断性总结 |
+| 一级市场分析 | QT【一级简评】+ 脚本发行数据 | 若资金日评含【一级简评】→ 按 `prompts/一级交易员短评角色.md` 精炼为 3-5 句判断性总结；脚本自动（卡片+明细表）→ 过 |
 
 - 注入方式：直接 `Edit` HTML 替换占位文本
 - 不得以"暂无有效消息"作为最终交付物

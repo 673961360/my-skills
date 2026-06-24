@@ -3,6 +3,7 @@
 
 import sys
 import unittest
+import json
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -435,7 +436,7 @@ class TemplateContractTest(unittest.TestCase):
             },
         )
 
-        self.assertIn("交易日报（学习模式）", learning_html)
+        self.assertIn("交易日报（分享模式）", learning_html)
         self.assertIn('id="learning-panel"', learning_html)
         self.assertIn("learning-flow-trigger", learning_html)
         self.assertIn('data-panel="__workflow"', learning_html)
@@ -478,7 +479,7 @@ class TemplateContractTest(unittest.TestCase):
             learning_annotations={
                 "__workflow": {
                     "标题": "整份日报如何生成",
-                    "主旨": "查看生成脚本和运行手册。",
+                    "主旨": "查看 generate_report.py 和 runbook.md。",
                     "引用文件": ["scripts/generate_report.py", "runbook.md"],
                 }
             },
@@ -491,7 +492,11 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("def render_report", learning_html)
         self.assertIn("生成交易日报", learning_html)
         self.assertIn("openReference", learning_html)
+        self.assertIn("renderInlineReferences", learning_html)
+        self.assertIn("learning-inline-reference", learning_html)
         self.assertIn("width: 620px", learning_html)
+        self.assertIn("相关文件", learning_html)
+        self.assertIn("learning-reference-block", learning_html)
 
     def test_learning_references_are_limited_to_safe_project_text_files(self):
         import generate_report
@@ -511,6 +516,85 @@ class TemplateContractTest(unittest.TestCase):
         self.assertNotIn("../outside.md", refs)
         self.assertNotIn("cache/cache.rar", refs)
         self.assertNotIn("missing.md", refs)
+
+    def test_learning_annotations_explain_current_automation_flow(self):
+        annotations = json.loads((SCRIPT_DIR.parent / "data" / "learning-annotations.json").read_text(encoding="utf-8"))
+
+        required_panels = ["__workflow", "01", "02", "03", "04", "现券", "权益", "一级", "风险"]
+        for panel_id in required_panels:
+            self.assertIn(panel_id, annotations)
+            self.assertIn("标题", annotations[panel_id])
+
+        workflow_text = json.dumps(annotations["__workflow"], ensure_ascii=False)
+
+        workflow_lead = annotations["__workflow"]["主旨"]
+        self.assertIsInstance(workflow_lead, list)
+        self.assertEqual(3, len(workflow_lead))
+        for sentence in workflow_lead:
+            self.assertLessEqual(len(sentence), 45)
+
+        for keyword in ("代码", "模型", "脱敏", "短评", "复跑"):
+            self.assertIn(keyword, workflow_text)
+        self.assertEqual(
+            ["固定日报口径", "内部数据接入", "外部数据补充", "确定性加工", "仿交易员写短评", "复跑和沉淀"],
+            [step["阶段"] for step in annotations["__workflow"]["流程"]],
+        )
+        for step in annotations["__workflow"]["流程"]:
+            descriptions = step["说明"] if isinstance(step["说明"], list) else [step["说明"]]
+            for description in descriptions:
+                self.assertLessEqual(len(description), 90)
+
+        self.assertIn("reference/API接口接入手册.md", annotations["01"]["引用文件"])
+        self.assertIn("reference/API接口接入手册.md", annotations["02"]["引用文件"])
+        self.assertIn("scripts/desensitize.py", annotations["02"]["引用文件"])
+        self.assertNotIn("data-sources.md", annotations["02"]["引用文件"])
+
+        self.assertNotIn("Skill沉淀", annotations["__workflow"])
+
+        template_text = (SCRIPT_DIR / "_learning_panel.html").read_text(encoding="utf-8")
+        self.assertIn(".learning-trust ul", template_text)
+        self.assertIn(".learning-summary ul", template_text)
+        self.assertIn("padding-left: 18px", template_text)
+
+        learning_html = render_report(
+            build_sample_data(),
+            charts={},
+            learning_mode=True,
+            learning_annotations=annotations,
+        )
+
+        self.assertIn('data-reference="reference/API接口接入手册.md"', learning_html)
+        self.assertIn("补充说明", learning_html)
+
+    def test_learning_annotations_explain_market_and_commentary_sources(self):
+        annotations = json.loads((SCRIPT_DIR.parent / "data" / "learning-annotations.json").read_text(encoding="utf-8"))
+
+        forecast_text = json.dumps(annotations["03"], ensure_ascii=False)
+        funding_text = json.dumps(annotations["04"], ensure_ascii=False)
+        bond_text = json.dumps(annotations["现券"], ensure_ascii=False)
+        stock_text = json.dumps(annotations["权益"], ensure_ascii=False)
+        primary_text = json.dumps(annotations["一级"], ensure_ascii=False)
+        risk_text = json.dumps(annotations["风险"], ensure_ascii=False)
+
+        self.assertEqual(["rules.md", "data-sources.md"], annotations["03"]["引用文件"])
+        self.assertNotIn("scripts/data_collector.py", annotations["03"]["引用文件"])
+
+        for keyword in ("中国货币网", "明日预测", "Skill"):
+            self.assertIn(keyword, forecast_text)
+        for keyword in ("API 网关", "QT", "提示词"):
+            self.assertIn(keyword, funding_text)
+        for keyword in ("QT", "现券", "提示词", "Skill"):
+            self.assertIn(keyword, bond_text)
+        for keyword in ("权益", "Web 搜索", "Agent"):
+            self.assertIn(keyword, stock_text)
+        for keyword in ("API 网关", "QT", "短评"):
+            self.assertIn(keyword, primary_text)
+        for keyword in ("脱敏", "录单", "写入机器猫", "测试环境验证", "生产沙箱写"):
+            self.assertIn(keyword, risk_text)
+        self.assertIn("录单、写入机器猫", risk_text)
+        self.assertIn("风险防范", risk_text)
+        self.assertIn("脱敏合规", risk_text)
+        self.assertIn("仅生产写", risk_text)
 
     def test_market_forecast_requires_indicators_and_methodology(self):
         forecast = build_market_forecast([], {}, {})
