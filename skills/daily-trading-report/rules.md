@@ -70,7 +70,7 @@
 
 - **连接**：`10.191.0.178:5674` / 服务名 `cjhx` / 用户 `fm`
 - **版本**：Oracle 11.2.0.4.0（必须 thick 模式）
-- **Instant Client**：环境变量 `ORACLE_LIB_DIR`，默认 `D:\Program Files\oracle_client_x64\instantclient_21_8`
+- **Instant Client**：通过环境变量 `ORACLE_LIB_DIR` 指定路径（需自行安装 Oracle Instant Client 21.8）
 - **表**：`ats.t_repo_robot_chatmessage`
 
 - **字段映射与分类关键词**：见 `findings.md`

@@ -5,7 +5,7 @@
 ## 生成日报
 
 ```bash
-cd "D:\代码\git_public\my-skills\skills\daily-trading-report\scripts"
+cd "<本 skill 目录>/scripts"
 uv run python generate_report.py --date {YYYYMMDD}
 ```
 
@@ -58,7 +58,7 @@ uv run python scripts/generate_report.py --date {YYYYMMDD} --use-cache
 | Oracle Instant Client 21.8 | thick 模式连接 Oracle 11g |
 | `ORACLE_LIB_DIR` 环境变量 | 指向 Instant Client 路径 |
 
-默认 Instant Client 路径：`D:\Program Files\oracle_client_x64\instantclient_21_8`
+默认 Instant Client 路径：由 `ORACLE_LIB_DIR` 环境变量指定（需自行安装 Oracle Instant Client 21.8）
 
 ## 工作流程
 
