@@ -181,16 +181,6 @@
     line-height: 1.6;
     margin: 8px 0 10px;
   }
-  .analysis-box {
-    color: #333;
-    font-size: 12px;
-    line-height: 1.85;
-    white-space: pre-wrap;
-    background: #fbfdff;
-    padding: 12px 14px;
-    border: 1px solid #cfe0ed;
-    border-radius: 3px;
-  }
   .kv-list {
     list-style: none;
     padding-left: 0;
@@ -414,7 +404,7 @@
     <div class="header-right">
       <div class="date">{{ template_date | default(display_date) }}（{{ weekday }}）</div>
       {% if learning_mode %}
-      <button class="learning-flow-trigger learning-trigger" type="button" data-panel="__workflow" aria-label="查看生成流程">生成流程</button>
+      <button class="learning-flow-trigger learning-trigger" type="button" data-panel="__workflow" aria-label="查看整份日报如何交给 AI 代理">交给 AI 代理</button>
       {% endif %}
     </div>
   </div>
@@ -719,7 +709,7 @@
   <div class="section">
     <div class="section-title{% if learning_mode %} learning-trigger{% endif %}"{% if learning_mode %} data-panel="现券" tabindex="0" role="button" aria-label="点击查看数据来源"{% endif %}>现券市场分析{% if learning_mode %}<span class="learning-icon" aria-hidden="true">ⓘ</span>{% endif %}</div>
 
-    <div class="analysis-box">{{ market_commentary.bond }}</div>
+    <div>{{ market_commentary.bond }}</div>
   </div>
 
   <!-- ═══════════════ 权益市场分析 ═══════════════ -->
@@ -743,7 +733,7 @@
     </table>
     {% endif %}
     {% if equity_market.available %}
-    <div class="analysis-box">{{ equity_market.commentary }}</div>
+    <div>{{ equity_market.commentary }}</div>
     <p class="muted-note">数据来源：外部市场短评</p>
     {% else %}
     <div class="empty-data">外部短评暂未获取</div>
@@ -788,11 +778,11 @@
     </table>
     {% endif %}
     {% if market_commentary.primary and market_commentary.primary != '暂无有效消息' %}
-    <div class="analysis-box">{{ market_commentary.primary }}</div>
+    <div>{{ market_commentary.primary }}</div>
     {% endif %}
     {% elif qt_commentary.get('一级发行', {}).get('count', 0) > 0 %}{# ⚠️ 死代码：db_client.fetch_daily_commentary 的 representative 仅装 资金/现券，不产出「一级发行」key，此分支恒不触发，实际降级走下方 else。详见 data-sources.md「一级市场分析·链路断点」。 #}
     <div class="inline-heading">发行情况</div>
-    <div class="analysis-box">{{ market_commentary.primary }}</div>
+    <div>{{ market_commentary.primary }}</div>
     <p class="muted-note">
       今日一级市场共 {{ qt_commentary['一级发行'].count }} 条相关短评，以下为代表性信息：
     </p>

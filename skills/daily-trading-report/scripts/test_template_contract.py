@@ -536,7 +536,7 @@ class TemplateContractTest(unittest.TestCase):
         for keyword in ("代码", "模型", "脱敏", "短评", "复跑"):
             self.assertIn(keyword, workflow_text)
         self.assertEqual(
-            ["固定日报口径", "内部数据接入", "外部数据补充", "确定性加工", "仿交易员写短评", "复跑和沉淀"],
+            ["固定日报口径", "内部数据接入", "外部数据补充", "确定性加工", "仿交易员写短评", "沉淀"],
             [step["阶段"] for step in annotations["__workflow"]["流程"]],
         )
         for step in annotations["__workflow"]["流程"]:
@@ -579,7 +579,7 @@ class TemplateContractTest(unittest.TestCase):
         self.assertEqual(["rules.md", "data-sources.md"], annotations["03"]["引用文件"])
         self.assertNotIn("scripts/data_collector.py", annotations["03"]["引用文件"])
 
-        for keyword in ("中国货币网", "明日预测", "Skill"):
+        for keyword in ("中国货币网", "明日方向", "Skill"):
             self.assertIn(keyword, forecast_text)
         for keyword in ("API 网关", "QT", "提示词"):
             self.assertIn(keyword, funding_text)
@@ -1190,7 +1190,7 @@ class TemplateContractTest(unittest.TestCase):
         self.assertIn("外部短评暂未获取", fallback_segment)
         self.assertIn("A股市场收盘后外部短评样例。", provided_segment)
         self.assertIn("数据来源：外部市场短评", provided_segment)
-        self.assertIn('<div class="analysis-box">', provided_segment)
+        self.assertIn('<div>A股市场收盘后外部短评样例。</div>', provided_segment)
         self.assertEqual(1, provided_segment.count('<div class="section">'))
 
     def test_funding_market_structure_is_stable_without_money_data(self):
@@ -1253,7 +1253,7 @@ class TemplateContractTest(unittest.TestCase):
 
         self.assertIn("暂无有效消息", fallback_segment)
         self.assertIn("现券样例短评", provided_segment)
-        self.assertIn('<div class="analysis-box">', provided_segment)
+        self.assertIn('<div>现券样例短评', provided_segment)
         self.assertEqual(1, provided_segment.count('<div class="section">'))
 
 
