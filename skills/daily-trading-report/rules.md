@@ -89,6 +89,7 @@
 | Windows GBK 编码 | emoji 输出到 cmd | `PYTHONIOENCODING=utf-8` |
 | 历史日报数据为空 | 测试环境 O32/API 不支持历史查询，返回 0 条 | 必须 `--use-cache` 使用 `cache/` 中已有缓存 |
 | 0008 响应结构非标准 | `cat_api_trade_0008` 返回两层嵌套 `data._embedded.vos[].inqResultMgrQueryInfos[]`，**非**  usual `data.body.rows` | 解析时用 `result.get("data", {}).get("_embedded", {}).get("vos", [])` 逐层取 |
+| O32/API 返回 403 | 本机网络/梯子问题，非 API 权限问题 | 排查本机代理/VPN 连通性，确认网络正常后重试 |
 
 ## 关键决策
 
